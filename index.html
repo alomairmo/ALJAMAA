@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار الذاكرة</title>
+    
+    <!-- استدعاء تصميم Tailwind CSS مباشرة -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- استدعاء مترجم Babel لتشغيل كود React داخل المتصفح مباشرة -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- تحسين الخط العربي -->
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Tajawal', sans-serif; }
+    </style>
+</head>
+<body class="bg-[#f8fafc] text-gray-800">
+
+    <!-- الحاوية التي سيعمل بداخلها تطبيق React -->
+    <div id="root"></div>
+
+    <!-- كود التطبيق الفعلي -->
+    <script type="text/babel" data-type="module">
+        // استدعاء مكتبات React والأيقونات و Firebase من روابط CDN مباشرة
+        import React, { useState, useEffect } from 'https://esm.sh/react@18';
+        import { createRoot } from 'https://esm.sh/react-dom@18/client';
+        import { Plus, Play, Check, X, Image as ImageIcon, Info, BarChart2, ChevronRight, User, Edit, Trash2, Search, Filter, Folder, Tag, ArrowRight, RefreshCw, Loader2 } from 'https://esm.sh/lucide-react@0.344.0';
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+        // إعدادات Firebase الخاصة بمشروعك
+        const firebaseConfig = {
+          apiKey: "AIzaSyBdqWDx6pdamFR7fRxkWDNpgY_-MydGuow",
+          authDomain: "aljamaa-a8dbc.firebaseapp.com",
+          projectId: "aljamaa-a8dbc",
+          storageBucket: "aljamaa-a8dbc.firebasestorage.app",
+          messagingSenderId: "904013515188",
+          appId: "1:904013515188:web:458cb089015488f2134ae1",
+          measurementId: "G-ZERHWEC1N7"
+        };
+
+        // تهيئة Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- المكون الرئيسي للتطبيق ---
+        function App() {
+          const [cards, setCards] = useState([]);
+          const [view, setView] = useState('gallery'); // 'gallery', 'quiz', 'add', 'edit'
+          const [showNames, setShowNames] = useState(true);
+          const [selectedCard, setSelectedCard] = useState(null);
+          const [galleryShowInfo, setGalleryShowInfo] = useState(false);
+          const [editingCard, setEditingCard] = useState(null);
+
+          // حالات Firebase
+          const [user, setUser] = useState(null);
+          const [loadingData, setLoadingData] = useState(true);
+          const [authError, setAuthError] = useState('');
+          const [dbError, setDbError] = useState('');
+
+          // حالات الاختبار
+          const [quizQueue, setQuizQueue] = useState([]);
+          const [quizShowInfo, setQuizShowInfo] = useState(false);
+
+          // حالات البحث والفلترة والمجلدات
+          const [searchQuery, setSearchQuery] = useState('');
+          const [selectedTagsFilter, setSelectedTagsFilter] = useState([]);
+          const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+          const [viewMode, setViewMode] = useState('all'); // 'all', 'folders'
+          const [activeFolder, setActiveFolder] = useState(null);
+
+          // تهيئة تسجيل الدخول المجهول وجلب البيانات
+          useEffect(() => {
+            const initAuth = async () => {
+              try {
+                await signInAnonymously(auth);
+              } catch (error) {
+                console.error("Auth Error:", error);
+                if (error.code === 'auth/configuration-not-found') {
+                  setAuthError('يرجى تفعيل "تسجيل الدخول كمجهول" (Anonymous Auth) من لوحة تحكم Firebase.');
+                } else {
+                  setAuthError(error.message);
+                }
+                setLoadingData(false);
+              }
+            };
+            initAuth();
+            
+            const unsubscribe = onAuthStateChanged(auth, setUser);
+            return () => unsubscribe();
+          }, []);
+
+          useEffect(() => {
+            if (!user) return;
+
+            const unsubscribe = onSnapshot(collection(db, "flashcards"), (snapshot) => {
+              const fetchedCards = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+              setCards(fetchedCards);
+              setLoadingData(false);
+              setDbError('');
+            }, (error) => {
+              console.error("Firestore Error:", error);
+              if (error.code === 'permission-denied') {
+                setDbError('ليس لديك صلاحية قراءة أو كتابة البيانات. تأكد من تعديل قواعد Firestore.');
+              } else {
+                setDbError(error.message);
+              }
+              setLoadingData(false);
+            });
+            return () => unsubscribe();
+          }, [user]);
+
+          // معالجة البيانات للمجلدات والفلترة
+          const allAvailableTags = Array.from(new Set(cards.flatMap(c => c.tags || [])));
+          const filteredCards = cards.filter(card => {
+            const searchLower = searchQuery.toLowerCase();
+            const matchesSearch = !searchQuery ||
+              (card.name && card.name.toLowerCase().includes(searchLower)) ||
+              (card.description && card.description.toLowerCase().includes(searchLower)) ||
+              (card.tags && card.tags.some(t => t.toLowerCase().includes(searchLower)));
+
+            const matchesTags = selectedTagsFilter.length === 0 ||
+              selectedTagsFilter.every(tag => card.tags && card.tags.includes(tag));
+
+            return matchesSearch && matchesTags;
+          });
+
+          const folders = {};
+          filteredCards.forEach(card => {
+            const cardTags = card.tags && card.tags.length > 0 ? card.tags : ['بدون تصنيف'];
+            cardTags.forEach(tag => {
+              if (!folders[tag]) folders[tag] = [];
+              folders[tag].push(card);
+            });
+          });
+
+          // دوال الاختبار
+          const startQuiz = (specificCards = null) => {
+            const cardsToQuiz = specificCards || (filteredCards.length > 0 ? filteredCards : []);
+            if (cardsToQuiz.length === 0) {
+              alert("لا توجد بطاقات لبدء الاختبار.");
+              return;
+            }
+            const shuffledCards = [...cardsToQuiz].sort(() => Math.random() - 0.5);
+            setQuizQueue(shuffledCards);
+            setQuizShowInfo(false);
+            setView('quiz');
+          };
+
+          const handleCorrect = async () => {
+            const currentCard = quizQueue[0];
+            try {
+              await updateDoc(doc(db, "flashcards", currentCard.id), {
+                correctCount: (currentCard.correctCount || 0) + 1
+              });
+            } catch (error) {
+              console.error("Error updating correct count:", error);
+            }
+            const newQueue = [...quizQueue];
+            newQueue.shift();
+            setQuizQueue(newQueue);
+            setQuizShowInfo(false);
+          };
+
+          const handleWrong = async () => {
+            const currentCard = quizQueue[0];
+            try {
+              await updateDoc(doc(db, "flashcards", currentCard.id), {
+                wrongCount: (currentCard.wrongCount || 0) + 1
+              });
+            } catch (error) {
+              console.error("Error updating wrong count:", error);
+            }
+            const newQueue = [...quizQueue];
+            newQueue.shift();
+            const insertIndex = Math.min(3, newQueue.length);
+            newQueue.splice(insertIndex, 0, currentCard);
+            setQuizQueue(newQueue);
+            setQuizShowInfo(false);
+          };
+
+          // دوال حفظ وحذف البطاقات
+          const handleSaveCard = async (cardData, isEdit, id) => {
+            try {
+              if (isEdit) {
+                await updateDoc(doc(db, "flashcards", id), cardData);
+              } else {
+                const newDocRef = doc(collection(db, "flashcards"));
+                await setDoc(newDocRef, { 
+                  ...cardData, 
+                  correctCount: 0, 
+                  wrongCount: 0,
+                  userId: user?.uid || 'anonymous'
+                });
+              }
+              setView('gallery');
+              setEditingCard(null);
+            } catch (error) {
+              console.error("Error saving card:", error);
+              alert("حدث خطأ أثناء الحفظ. تأكد من إعدادات وصلاحيات قاعدة بيانات Firestore.");
+            }
+          };
+
+          const handleDeleteCard = async (id) => {
+            if (window.confirm("هل أنت متأكد من حذف هذه البطاقة؟")) {
+              try {
+                await deleteDoc(doc(db, "flashcards", id));
+                setSelectedCard(null);
+              } catch (error) {
+                console.error("Error deleting card:", error);
+              }
+            }
+          };
+
+          const handleEditCard = (card) => {
+            setEditingCard(card);
+            setSelectedCard(null);
+            setView('edit');
+          };
+
+          // --- مكون نموذج إضافة/تعديل بطاقة ---
+          const CardFormView = ({ initialData, onSave }) => {
+            const isEdit = !!initialData;
+            const [name, setName] = useState(initialData?.name || '');
+            const [description, setDescription] = useState(initialData?.description || '');
+            const [image, setImage] = useState(initialData?.image || '');
+            const [imageFile, setImageFile] = useState(null);
+            const [isUploading, setIsUploading] = useState(false);
+            const [tags, setTags] = useState(initialData?.tags || []);
+            const [tagInput, setTagInput] = useState('');
+
+            const handleImageUpload = (e) => {
+              const file = e.target.files[0];
+              if (file) {
+                setImageFile(file);
+                const url = URL.createObjectURL(file);
+                setImage(url);
+              }
+            };
+
+            const handlePaste = (e) => {
+              const items = e.clipboardData?.items;
+              if (!items) return;
+              for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                  const file = items[i].getAsFile();
+                  if (file) {
+                    setImageFile(file);
+                    const url = URL.createObjectURL(file);
+                    setImage(url);
+                  }
+                  break;
+                }
+              }
+            };
+
+            const handleAddTag = (e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                const val = tagInput.trim();
+                if (val && !tags.includes(val)) {
+                  setTags([...tags, val]);
+                }
+                setTagInput('');
+              }
+            };
+
+            const handleRemoveTag = (tagToRemove) => {
+              setTags(tags.filter(t => t !== tagToRemove));
+            };
+
+            // ضغط الصورة وتحويلها لنص
+            const compressImageToBase64 = (file) => {
+              return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (event) => {
+                  const img = new window.Image();
+                  img.src = event.target.result;
+                  img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 800;
+                    const MAX_HEIGHT = 800;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                      if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                    } else {
+                      if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                    resolve(dataUrl);
+                  };
+                  img.onerror = (error) => reject(error);
+                };
+                reader.onerror = (error) => reject(error);
+              });
+            };
+
+            const handleSave = async (e) => {
+              e.preventDefault();
+              // السماح بالحفظ إذا كان هناك حقل واحد على الأقل ممتلئ
+              if (!name && !image && !description && !imageFile) {
+                alert("الرجاء تعبئة حقل واحد على الأقل (الاسم، الصورة، أو الوصف) لإنشاء البطاقة!");
+                return;
+              }
+              
+              setIsUploading(true);
+              let finalImageUrl = image;
+
+              try {
+                if (imageFile) {
+                  finalImageUrl = await compressImageToBase64(imageFile);
+                }
+                await onSave({ name, description, image: finalImageUrl, tags }, isEdit, initialData?.id);
+              } catch (error) {
+                console.error("Error processing image:", error);
+                alert("حدث خطأ أثناء حفظ الصورة.");
+              } finally {
+                setIsUploading(false);
+              }
+            };
+
+            return (
+              <div onPaste={handlePaste} className="max-w-2xl mx-auto bg-white p-8 rounded-3xl shadow-sm border border-gray-100 animate-in slide-in-from-bottom-4 mt-8">
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
+                    <span className="bg-blue-100 text-blue-600 p-2 rounded-xl">
+                      {isEdit ? <Edit size={24} /> : <Plus size={24} />}
+                    </span>
+                    {isEdit ? 'تعديل البطاقة' : 'إضافة بطاقة جديدة'}
+                  </h2>
+                  <button onClick={() => { setView('gallery'); setEditingCard(null); }} className="text-gray-500 hover:text-gray-800 flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-xl transition">
+                    عودة <ChevronRight size={18} />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSave} className="space-y-6">
+                  <div>
+                    <label className="block text-gray-700 font-bold mb-2">الاسم / العنوان</label>
+                    <input 
+                      type="text" 
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition bg-gray-50 focus:bg-white"
+                      placeholder="مثال: الخوارزمي"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-700 font-bold mb-2">التصنيفات (المجلدات)</label>
+                    <div className="w-full border border-gray-200 rounded-xl p-3 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition bg-gray-50 focus-within:bg-white">
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {tags.map(tag => (
+                          <span key={tag} className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full flex items-center gap-1.5 text-sm font-medium">
+                            {tag} 
+                            <X size={14} className="cursor-pointer hover:text-red-500 transition" onClick={() => handleRemoveTag(tag)} />
+                          </span>
+                        ))}
+                      </div>
+                      <input 
+                        type="text" 
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        onKeyDown={handleAddTag}
+                        className="w-full bg-transparent outline-none placeholder-gray-400 mt-1"
+                        placeholder="اكتب اسم المجلد واضغط Enter لإضافته..."
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-700 font-bold mb-2">الصورة</label>
+                    <div className="flex flex-col gap-4">
+                      <input 
+                        type="url" 
+                        value={image}
+                        onChange={(e) => setImage(e.target.value)}
+                        className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition bg-gray-50 focus:bg-white text-left"
+                        placeholder="https://example.com/image.jpg (أو قم برفع/لصق صورة بالأسفل)"
+                        dir="ltr"
+                      />
+                      <div className="flex items-center justify-center w-full">
+                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition">
+                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <ImageIcon className="w-8 h-8 mb-3 text-gray-400" />
+                            <p className="mb-2 text-sm text-gray-500 font-medium">اضغط لرفع صورة من جهازك</p>
+                            <p className="text-xs text-gray-400 mt-1">يمكنك أيضاً لصق الصورة مباشرة (Ctrl+V)</p>
+                          </div>
+                          <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                        </label>
+                      </div>
+                    </div>
+                    {image && (
+                      <div className="mt-4 w-32 h-32 rounded-xl overflow-hidden border border-gray-200 shadow-sm mx-auto bg-gray-100">
+                        <img src={image} alt="Preview" className="w-full h-full object-contain" onError={(e) => { e.target.style.display='none'; }} />
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-700 font-bold mb-2">الوصف / المعلومات</label>
+                    <textarea 
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition bg-gray-50 focus:bg-white h-32 resize-none"
+                      placeholder="اكتب نبذة أو أي معلومات ترغب في حفظها..."
+                    />
+                  </div>
+
+                  <button 
+                    type="submit"
+                    disabled={isUploading}
+                    className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl hover:bg-blue-700 transition shadow-lg shadow-blue-200 text-lg flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    {isUploading ? <Loader2 className="animate-spin" size={24} /> : null}
+                    {isUploading ? 'جاري معالجة البيانات والحفظ...' : (isEdit ? 'حفظ التعديلات' : 'حفظ وإضافة')}
+                  </button>
+                </form>
+              </div>
+            );
+          };
+
+          // --- مكون المعرض ---
+          const renderGallery = () => {
+            if (authError || dbError) {
+              return (
+                <div className="flex flex-col items-center justify-center py-20 px-4 animate-in fade-in">
+                  <div className="bg-red-50 text-red-700 p-8 rounded-3xl max-w-2xl text-center border border-red-200 shadow-sm">
+                    <X size={56} className="mx-auto mb-4 text-red-500" strokeWidth={2.5} />
+                    <h2 className="text-2xl font-bold mb-4">يوجد خطأ في إعدادات Firebase</h2>
+                    {authError && <p className="text-sm">{authError}</p>}
+                    {dbError && <p className="text-sm">{dbError}</p>}
+                  </div>
+                </div>
+              );
+            }
+
+            if (loadingData) {
+              return (
+                <div className="flex flex-col items-center justify-center py-32 animate-in fade-in">
+                  <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+                  <h2 className="text-xl text-gray-600 font-bold">جاري تحميل البطاقات...</h2>
+                </div>
+              );
+            }
+
+            return (
+              <div className="animate-in fade-in duration-300">
+                <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-2xl shadow-sm mb-4 gap-4 border border-gray-100">
+                  <div className="flex items-center gap-4 w-full sm:w-auto">
+                    <button 
+                      onClick={() => setView('add')}
+                      className="flex items-center gap-2 bg-blue-50 text-blue-600 px-4 py-2 rounded-xl hover:bg-blue-100 transition font-medium w-full sm:w-auto justify-center"
+                    >
+                      <Plus size={20} /> إضافة بطاقة
+                    </button>
+                    <label className="flex items-center cursor-pointer gap-3 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100">
+                      <div className="relative">
+                        <input type="checkbox" className="sr-only" checked={showNames} onChange={() => setShowNames(!showNames)} />
+                        <div className={`block w-12 h-6 rounded-full transition ${showNames ? 'bg-blue-500' : 'bg-gray-300'}`}></div>
+                        <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition transform ${showNames ? 'translate-x-6' : ''}`}></div>
+                      </div>
+                      <span className="text-gray-700 font-medium select-none text-sm">إظهار الأسماء</span>
+                    </label>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto mt-4 sm:mt-0">
+                    {viewMode === 'folders' && activeFolder && (
+                      <button
+                        onClick={() => startQuiz(folders[activeFolder])}
+                        className="flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-3 rounded-xl hover:shadow-lg hover:from-emerald-600 hover:to-teal-700 transition font-bold text-lg w-full sm:w-auto whitespace-nowrap"
+                      >
+                        <Play size={24} fill="currentColor" /> الاختبار في ({activeFolder})
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => startQuiz()}
+                      className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-3 rounded-xl hover:shadow-lg hover:from-blue-700 hover:to-indigo-700 transition font-bold text-lg w-full sm:w-auto whitespace-nowrap"
+                    >
+                      <Play size={24} fill="currentColor" /> بدء الاختبار
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col md:flex-row gap-4 items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6">
+                  <div className="relative w-full md:w-auto flex-1">
+                     <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 focus-within:ring-2 focus-within:ring-blue-500 transition">
+                        <Search size={20} className="text-gray-400 ml-2" />
+                        <input 
+                          type="text"
+                          placeholder="ابحث في البطاقات..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="w-full bg-transparent outline-none text-gray-700"
+                        />
+                     </div>
+                  </div>
+                  <div className="flex bg-gray-100 p-1.5 rounded-xl w-full md:w-auto">
+                    <button
+                      onClick={() => { setViewMode('all'); setActiveFolder(null); }}
+                      className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition flex justify-center items-center gap-2 ${viewMode === 'all' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
+                    >
+                      <ImageIcon size={18} /> كل الصور
+                    </button>
+                    <button
+                      onClick={() => setViewMode('folders')}
+                      className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition flex justify-center items-center gap-2 ${viewMode === 'folders' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
+                    >
+                      <Folder size={18} /> مجلدات
+                    </button>
+                  </div>
+                </div>
+
+                {cards.length === 0 ? (
+                  <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-300">
+                    <ImageIcon className="mx-auto text-gray-300 mb-4" size={64} />
+                    <h2 className="text-xl text-gray-500 font-medium">لا توجد بطاقات حتى الآن</h2>
+                  </div>
+                ) : (
+                  <>
+                    {viewMode === 'all' && (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                        {filteredCards.map(card => (
+                          <div 
+                            key={card.id} 
+                            onClick={() => { setSelectedCard(card); setGalleryShowInfo(false); }}
+                            className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden border border-gray-100 transform hover:-translate-y-1 flex flex-col"
+                          >
+                            <div className="aspect-square w-full overflow-hidden bg-gray-50 relative p-2">
+                              <img 
+                                src={card.image || 'https://via.placeholder.com/400x400?text=بدون+صورة'} 
+                                alt={card.name || 'بدون اسم'} 
+                                className="w-full h-full object-contain transition duration-500 group-hover:scale-105 rounded-xl"
+                                onError={(e) => { e.target.src = 'https://via.placeholder.com/400x400?text=بدون+صورة'; }}
+                              />
+                            </div>
+                            
+                            <div className={`p-4 transition-all duration-300 flex flex-col justify-center flex-grow ${showNames ? 'opacity-100 h-auto' : 'opacity-0 h-0 p-0 overflow-hidden'}`}>
+                              <h3 className="font-bold text-gray-800 text-center truncate">{card.name || 'بدون اسم'}</h3>
+                              {card.tags && card.tags.length > 0 && (
+                                <div className="flex justify-center gap-1 mt-2 flex-wrap">
+                                  {card.tags.slice(0, 2).map(tag => (
+                                    <span key={tag} className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">#{tag}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {viewMode === 'folders' && !activeFolder && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                        {Object.keys(folders).map(folderName => (
+                          <div
+                            key={folderName}
+                            onClick={() => setActiveFolder(folderName)}
+                            className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-300 cursor-pointer transition text-center flex flex-col items-center gap-4 group"
+                          >
+                            <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:bg-blue-100 transition duration-300">
+                              <Folder size={40} fill="currentColor" className="opacity-80" />
+                            </div>
+                            <div className="w-full">
+                              <h3 className="font-bold text-gray-800 truncate" title={folderName}>{folderName}</h3>
+                              <p className="text-sm text-gray-500 mt-1">{folders[folderName].length} بطاقات</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {viewMode === 'folders' && activeFolder && (
+                      <div className="animate-in slide-in-from-bottom-4">
+                        <div className="flex items-center gap-4 mb-6 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                          <button
+                            onClick={() => setActiveFolder(null)}
+                            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 px-4 py-2 rounded-xl transition font-medium"
+                          >
+                            <ArrowRight size={18} /> عودة
+                          </button>
+                          <h2 className="text-xl font-bold flex items-center gap-2 text-gray-800">
+                            <Folder className="text-blue-500" fill="currentColor" /> {activeFolder}
+                          </h2>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                          {folders[activeFolder]?.map(card => (
+                            <div 
+                              key={card.id} 
+                              onClick={() => { setSelectedCard(card); setGalleryShowInfo(false); }}
+                              className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden border border-gray-100 transform hover:-translate-y-1 flex flex-col"
+                            >
+                              <div className="aspect-square w-full overflow-hidden bg-gray-50 relative p-2">
+                                <img 
+                                  src={card.image || 'https://via.placeholder.com/400x400?text=بدون+صورة'} 
+                                  alt={card.name || 'بدون اسم'} 
+                                  className="w-full h-full object-contain transition duration-500 group-hover:scale-105 rounded-xl"
+                                  onError={(e) => { e.target.src = 'https://via.placeholder.com/400x400?text=بدون+صورة'; }}
+                                />
+                              </div>
+                              <div className={`p-4 transition-all duration-300 flex flex-col justify-center flex-grow ${showNames ? 'opacity-100 h-auto' : 'opacity-0 h-0 p-0 overflow-hidden'}`}>
+                                <h3 className="font-bold text-gray-800 text-center truncate">{card.name || 'بدون اسم'}</h3>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* نافذة تفاصيل البطاقة المكبرة */}
+                {selectedCard && (
+                  <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 lg:p-10 animate-in fade-in">
+                    <div className="bg-white rounded-[2rem] w-full max-w-2xl p-6 shadow-2xl relative flex flex-col max-h-[90vh] overflow-y-auto">
+                      <div className="w-full flex justify-between items-center mb-6">
+                        <div className="flex gap-3">
+                          <button 
+                            onClick={() => handleEditCard(selectedCard)}
+                            className="bg-blue-50 text-blue-600 hover:bg-blue-100 p-3 rounded-xl transition shadow-sm flex items-center gap-2 font-bold"
+                          >
+                            <Edit size={20} /> <span className="hidden sm:inline">تعديل</span>
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteCard(selectedCard.id)}
+                            className="bg-red-50 text-red-600 hover:bg-red-100 p-3 rounded-xl transition shadow-sm flex items-center gap-2 font-bold"
+                          >
+                            <Trash2 size={20} /> <span className="hidden sm:inline">حذف</span>
+                          </button>
+                        </div>
+                        <button 
+                          onClick={() => setSelectedCard(null)}
+                          className="bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 p-3 rounded-xl transition shadow-sm"
+                        >
+                          <X size={20} />
+                        </button>
+                      </div>
+                      
+                      <div className="w-full h-[50vh] min-h-[400px] rounded-3xl overflow-hidden bg-gray-50 relative border border-gray-100 mb-6 flex items-center justify-center p-4">
+                        {!galleryShowInfo ? (
+                          <img 
+                            src={selectedCard.image || 'https://via.placeholder.com/800x800?text=بدون+صورة'} 
+                            alt={selectedCard.name || 'بدون اسم'} 
+                            className="w-full h-full object-contain animate-in fade-in zoom-in duration-300"
+                            onError={(e) => { e.target.src = 'https://via.placeholder.com/800x800?text=بدون+صورة'; }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300 overflow-y-auto">
+                            <h3 className="text-3xl font-black text-gray-800 mb-4">{selectedCard.name || 'بدون اسم'}</h3>
+                            <p className="text-gray-600 text-lg leading-relaxed mb-4">{selectedCard.description || 'لا يوجد وصف'}</p>
+                            {selectedCard.tags && selectedCard.tags.length > 0 && (
+                              <div className="flex justify-center flex-wrap gap-2">
+                                {selectedCard.tags.map(tag => (
+                                  <span key={tag} className="bg-white border border-gray-200 text-gray-600 px-3 py-1 rounded-full text-sm font-medium">#{tag}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      
+                      <button 
+                        onClick={() => setGalleryShowInfo(!galleryShowInfo)}
+                        className="w-full bg-blue-100 text-blue-700 border-2 border-transparent hover:border-blue-200 hover:bg-blue-200 py-4 rounded-2xl transition-all duration-300 font-bold text-xl flex items-center justify-center gap-3 shadow-sm active:scale-95 mb-6"
+                      >
+                        <RefreshCw size={24} /> {galleryShowInfo ? 'إرجاع الصورة' : 'قلب البطاقة (عرض التفاصيل)'}
+                      </button>
+
+                      <div className="flex w-full gap-4">
+                        <div className="flex-1 bg-green-50 border border-green-100 rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm">
+                          <span className="text-3xl font-black text-green-600 mb-1">{selectedCard.correctCount}</span>
+                          <span className="text-green-800 text-sm font-bold flex items-center gap-1"><Check size={16}/> إجابة صحيحة</span>
+                        </div>
+                        <div className="flex-1 bg-red-50 border border-red-100 rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm">
+                          <span className="text-3xl font-black text-red-600 mb-1">{selectedCard.wrongCount}</span>
+                          <span className="text-red-800 text-sm font-bold flex items-center gap-1"><X size={16}/> إجابة خاطئة</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          };
+
+          // --- مكون الاختبار ---
+          const renderQuiz = () => {
+            if (quizQueue.length === 0) {
+              return (
+                <div className="max-w-xl mx-auto text-center py-20 bg-white rounded-3xl shadow-sm border border-gray-100 animate-in zoom-in mt-8">
+                  <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <Check size={48} strokeWidth={3} />
+                  </div>
+                  <h2 className="text-3xl font-bold text-gray-800 mb-4">انتهى الاختبار!</h2>
+                  <button 
+                    onClick={() => setView('gallery')}
+                    className="bg-gray-900 text-white px-8 py-3 rounded-xl hover:bg-gray-800 transition font-bold text-lg mt-4"
+                  >
+                    العودة للمجلدات
+                  </button>
+                </div>
+              );
+            }
+
+            const currentCard = quizQueue[0];
+
+            return (
+              <div className="max-w-2xl mx-auto flex flex-col items-center animate-in slide-in-from-bottom-8 mt-4">
+                <div className="w-full flex justify-between items-center mb-6 px-4">
+                  <span className="text-gray-500 font-medium">متبقي: <span className="text-gray-800 font-bold text-lg">{quizQueue.length}</span></span>
+                  <button onClick={() => setView('gallery')} className="text-gray-400 hover:text-gray-700 font-medium transition">إنهاء الاختبار</button>
+                </div>
+
+                <div className="bg-white p-4 rounded-[2rem] shadow-xl border border-gray-100 w-full mb-6 relative">
+                  <div className="w-full h-[50vh] min-h-[400px] rounded-3xl overflow-hidden bg-gray-50 relative border border-gray-100 flex items-center justify-center p-4">
+                    {!quizShowInfo ? (
+                      <img 
+                        key={currentCard.id}
+                        src={currentCard.image || 'https://via.placeholder.com/800x800?text=بدون+صورة'} 
+                        alt="Quiz Card" 
+                        className="w-full h-full object-contain animate-in fade-in zoom-in duration-300"
+                        onError={(e) => { e.target.src = 'https://via.placeholder.com/800x800?text=بدون+صورة'; }}
+                      />
+                    ) : (
+                      <div key={`info-${currentCard.id}`} className="w-full h-full flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300 overflow-y-auto">
+                        <h3 className="text-3xl font-black text-gray-800 mb-4">{currentCard.name || 'بدون اسم'}</h3>
+                        <p className="text-gray-600 text-lg leading-relaxed mb-4">{currentCard.description || 'لا يوجد وصف'}</p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {!quizShowInfo && (
+                    <div className="absolute -bottom-5 left-1/2 transform -translate-x-1/2 bg-white px-6 py-2 rounded-full shadow-md border border-gray-100 font-bold text-gray-400 text-sm tracking-widest flex items-center gap-2">
+                      من هذا؟ <User size={16} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="w-full flex flex-col items-center mt-2 px-2 gap-4">
+                  <button 
+                    onClick={() => setQuizShowInfo(!quizShowInfo)}
+                    className="w-full bg-blue-100 text-blue-700 border-2 border-transparent hover:border-blue-200 hover:bg-blue-200 py-4 rounded-2xl transition-all duration-300 font-bold text-xl flex items-center justify-center gap-3 shadow-sm active:scale-95 animate-in fade-in"
+                  >
+                    <RefreshCw size={24} /> {quizShowInfo ? 'إرجاع الصورة' : 'قلب البطاقة (عرض الإجابة)'}
+                  </button>
+
+                  <div className="flex w-full gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300 mt-2">
+                    <button 
+                      onClick={handleWrong}
+                      className="flex-1 bg-red-50 text-red-600 border-2 border-red-200 hover:bg-red-600 hover:text-white py-5 rounded-2xl transition-all duration-300 font-bold text-2xl flex items-center justify-center gap-3 shadow-sm hover:shadow-red-200/50 hover:shadow-xl active:scale-95"
+                    >
+                      <X size={32} strokeWidth={3} /> خطأ
+                    </button>
+                    <button 
+                      onClick={handleCorrect}
+                      className="flex-1 bg-green-50 text-green-600 border-2 border-green-200 hover:bg-green-600 hover:text-white py-5 rounded-2xl transition-all duration-300 font-bold text-2xl flex items-center justify-center gap-3 shadow-sm hover:shadow-green-200/50 hover:shadow-xl active:scale-95"
+                    >
+                      <Check size={32} strokeWidth={3} /> صح
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          };
+
+          return (
+            <div>
+              <header className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+                  <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('gallery')}>
+                    <div className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white p-2.5 rounded-xl shadow-md">
+                      <ImageIcon size={28} />
+                    </div>
+                    <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-l from-blue-800 to-indigo-600 tracking-tight">
+                      اختبار الذاكرة
+                    </h1>
+                  </div>
+                </div>
+              </header>
+              <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {view === 'gallery' && renderGallery()}
+                {view === 'add' && <CardFormView onSave={handleSaveCard} />}
+                {view === 'edit' && <CardFormView initialData={editingCard} onSave={handleSaveCard} />}
+                {view === 'quiz' && renderQuiz()}
+              </main>
+            </div>
+          );
+        }
+
+        // تشغيل التطبيق في الصفحة
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
