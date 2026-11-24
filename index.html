@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>اختبار الذاكرة</title>
+    <title>اختبار الذاكرة - مشجرة آل السعيدي</title>
     
     <!-- استدعاء تصميم Tailwind CSS مباشرة -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -15,6 +15,92 @@
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Tajawal', sans-serif; }
+
+        /* تنسيقات خطوط الربط الهرمية للمشجرة من الأعلى للأسفل (RTL) */
+        .tree-wrapper {
+            direction: rtl;
+        }
+        .tree ul {
+            padding-top: 24px;
+            position: relative;
+            transition: all 0.3s;
+            display: flex;
+            justify-content: center;
+        }
+        .tree li {
+            float: right;
+            text-align: center;
+            list-style-type: none;
+            position: relative;
+            padding: 24px 10px 0 10px;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        /* الخطوط الأفقية فوق الأبناء */
+        .tree li::before, .tree li::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            border-top: 2px solid #cbd5e1;
+            width: 50%;
+            height: 24px;
+        }
+        .tree li::after {
+            right: 50%;
+            left: auto;
+            border-left: 2px solid #cbd5e1;
+        }
+        /* إزالة الخطوط الزائدة للعقد الوحيدة أو الطرفية */
+        .tree li:only-child::after, .tree li:only-child::before {
+            display: none;
+        }
+        .tree li:only-child {
+            padding-top: 0;
+        }
+        /* أول ابن (في أقصى اليمين في RTL) */
+        .tree li:first-child::before {
+            border: 0 none;
+        }
+        .tree li:first-child::after {
+            border-radius: 0 8px 0 0;
+        }
+        /* آخر ابن (في أقصى اليسار في RTL) */
+        .tree li:last-child::after {
+            border: 0 none;
+        }
+        .tree li:last-child::before {
+            border-left: 2px solid #cbd5e1;
+            border-radius: 8px 0 0 0;
+        }
+        /* الخط العمودي النازل من الأب إلى خط الأبناء */
+        .tree ul ul::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            border-left: 2px solid #cbd5e1;
+            width: 0;
+            height: 24px;
+        }
+        /* تحسين شريط التمرير */
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
     </style>
 </head>
 <body class="bg-[#f8fafc] text-gray-800">
@@ -25,9 +111,13 @@
     <!-- كود التطبيق الفعلي -->
     <script type="text/babel" data-type="module">
         // استدعاء مكتبات React والأيقونات و Firebase من روابط CDN مباشرة
-        import React, { useState, useEffect } from 'https://esm.sh/react@18';
+        import React, { useState, useEffect, useMemo } from 'https://esm.sh/react@18';
         import { createRoot } from 'https://esm.sh/react-dom@18/client';
-        import { Plus, Play, Check, X, Image as ImageIcon, Info, BarChart2, ChevronRight, User, Edit, Trash2, Search, Filter, Folder, Tag, ArrowRight, RefreshCw, Loader2 } from 'https://esm.sh/lucide-react@0.344.0';
+        import { 
+            Plus, Play, Check, X, Image as ImageIcon, Info, BarChart2, 
+            ChevronRight, User, Edit, Trash2, Search, Filter, Folder, 
+            Tag, ArrowRight, RefreshCw, Loader2, GitFork, Users, Sparkles, ZoomIn, ZoomOut
+        } from 'https://esm.sh/lucide-react@0.344.0';
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
         import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
@@ -48,6 +138,220 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
+        // المرجع الرئيسي الموحد للمشجرة
+        const CLAN_ROOT_TITLE = "آل السعيدي - آل سعد - بلّسمر";
+
+        // 1. رسمة امرأة بلبس عسيري تقليدي رمزية بدون وجه مرسومة بالكود (SVG)
+        const AsiriWomanAvatar = ({ className = "w-full h-full" }) => (
+            <svg viewBox="0 0 120 120" className={className} xmlns="http://www.w3.org/2000/svg">
+                {/* خلفية وردية فاتحة ناعمة */}
+                <rect width="120" height="120" fill="#fdf2f8" />
+                <circle cx="60" cy="60" r="54" fill="#fce7f3" opacity="0.65" />
+
+                {/* الطرحة / الشيلة العسيرية الخلفية السوداء */}
+                <path d="M35 36 C35 19, 85 19, 85 36 L94 92 L26 92 Z" fill="#18181b" />
+
+                {/* حواف الطرحة المطرزة بالخيوط الذهبية والملونة */}
+                <path d="M36 35 C36 20, 84 20, 84 35" fill="none" stroke="#eab308" strokeWidth="2.5" strokeDasharray="3 2" />
+                <path d="M32 52 L27 88 M88 52 L93 88" stroke="#ef4444" strokeWidth="2" strokeDasharray="4 2" />
+
+                {/* الوجه الرمزي (بدون ملامح وجه) */}
+                <ellipse cx="60" cy="40" rx="13" ry="15" fill="#f3d2c1" />
+
+                {/* عصابة الرأس العسيرية التقليدية (المنديل الأصفر والأحمر) */}
+                <path d="M46 31 Q60 25 74 31 L73 35 Q60 29 47 35 Z" fill="#dc2626" />
+                <path d="M47 29 Q60 23 73 29" fill="none" stroke="#facc15" strokeWidth="2" />
+
+                {/* الثوب العسيري الأسود الفضفاض */}
+                <path d="M37 60 C37 54, 83 54, 83 60 L98 120 L22 120 Z" fill="#09090b" />
+
+                {/* تطريز الصدر العسيري الهندسي (القط العسيري) */}
+                <polygon points="60,57 49,73 60,89 71,73" fill="#dc2626" stroke="#facc15" strokeWidth="1.5" />
+                <polygon points="60,62 54,73 60,84 66,73" fill="#16a34a" />
+                <circle cx="60" cy="73" r="2.5" fill="#facc15" />
+
+                {/* الخطوط العسيرية الملونة العمودية والمائلة على الثوب */}
+                <line x1="60" y1="89" x2="60" y2="120" stroke="#facc15" strokeWidth="3" />
+                <line x1="56" y1="87" x2="56" y2="120" stroke="#dc2626" strokeWidth="2" />
+                <line x1="64" y1="87" x2="64" y2="120" stroke="#16a34a" strokeWidth="2" />
+
+                <path d="M46 68 L36 120" stroke="#f97316" strokeWidth="2.5" />
+                <path d="M42 72 L31 120" stroke="#facc15" strokeWidth="1.5" strokeDasharray="4 2" />
+                
+                <path d="M74 68 L84 120" stroke="#f97316" strokeWidth="2.5" />
+                <path d="M78 72 L89 120" stroke="#facc15" strokeWidth="1.5" strokeDasharray="4 2" />
+
+                <polygon points="45,112 49,104 53,112" fill="#dc2626" />
+                <polygon points="67,112 71,104 75,112" fill="#16a34a" />
+            </svg>
+        );
+
+        // 2. رسمة رجل باللبس السعودي الجنوبي التراثي (ثوب أبيض، غترة وعقال، محزم متقاطع، وبندقية مقمع مائلة) بدون وجه
+        const MaleDefaultAvatar = ({ className = "w-full h-full" }) => (
+            <svg viewBox="0 0 120 120" className={className} xmlns="http://www.w3.org/2000/svg">
+                {/* خلفية زرقاء فاتحة */}
+                <rect width="120" height="120" fill="#e0f2fe" />
+                <circle cx="60" cy="60" r="54" fill="#bae6fd" opacity="0.45" />
+
+                {/* الغترة البيضاء المنسدلة على الكتفين */}
+                <path d="M38 28 C38 15, 82 15, 82 28 L92 86 L28 86 Z" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
+                {/* طيات الغترة الجانبية */}
+                <path d="M42 48 L34 86 M78 48 L86 86" stroke="#e2e8f0" strokeWidth="1.5" />
+
+                {/* الوجه الرمزي (بدون ملامح وجه) */}
+                <ellipse cx="60" cy="37" rx="12" ry="14" fill="#eac0a2" />
+                {/* الرقبة وياقة الثوب */}
+                <rect x="55" y="49" width="10" height="7" fill="#eac0a2" />
+
+                {/* مقدمة الغترة فوق الرأس */}
+                <path d="M46 27 Q60 19 74 27 L76 34 Q60 27 44 34 Z" fill="#ffffff" />
+                {/* العقال الأسود المزدوج */}
+                <rect x="46" y="23" width="28" height="3.2" rx="1.6" fill="#18181b" />
+                <rect x="46" y="27" width="28" height="3.2" rx="1.6" fill="#09090b" />
+                {/* خيوط العقال الذهبية الدقيقة */}
+                <line x1="52" y1="23" x2="52" y2="30" stroke="#eab308" strokeWidth="1" />
+                <line x1="68" y1="23" x2="68" y2="30" stroke="#eab308" strokeWidth="1" />
+
+                {/* الثوب الأبيض الفضفاض والأكمام */}
+                <path d="M35 58 C35 53, 85 53, 85 58 L98 120 L22 120 Z" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
+                {/* ياقة الثوب السعودي */}
+                <path d="M53 53 L60 58 L67 53 L67 57 L60 61 L53 57 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1" />
+                {/* خط الأزرار الأمامي */}
+                <line x1="60" y1="61" x2="60" y2="85" stroke="#cbd5e1" strokeWidth="1" />
+
+                {/* المحزم الجلدي المتقاطع على الصدر (إكس) */}
+                <path d="M46 55 L74 96 L70 98 L42 57 Z" fill="#451a03" />
+                <path d="M74 55 L46 96 L50 98 L78 57 Z" fill="#451a03" />
+                {/* مسامير/زخارف فضية وذهبية على المحزم المتقاطع */}
+                <line x1="44" y1="56" x2="72" y2="97" stroke="#d97706" strokeWidth="1.2" strokeDasharray="3 4" />
+                <line x1="76" y1="56" x2="48" y2="97" stroke="#d97706" strokeWidth="1.2" strokeDasharray="3 4" />
+
+                {/* حزام الخصر الجنوبي الداكن المزخرف */}
+                <rect x="40" y="94" width="40" height="7" rx="2" fill="#292524" />
+                {/* إبزيم الحزام الفضي والزخارف */}
+                <rect x="56" y="93.5" width="8" height="8" rx="1" fill="none" stroke="#e2e8f0" strokeWidth="1.5" />
+                <circle cx="47" cy="97.5" r="1.2" fill="#eab308" />
+                <circle cx="73" cy="97.5" r="1.2" fill="#eab308" />
+
+                {/* البندقية التراثية (المقمع) مائلة من أسفل اليسار إلى أعلى اليمين */}
+                <g transform="rotate(-38 60 72)">
+                    {/* أخمص البندقية الخشبي الداكن (أسفل اليسار) */}
+                    <path d="M12 70 L32 69 L32 74 L10 77 C8 77, 8 71, 12 70 Z" fill="#3f2305" stroke="#1c1917" strokeWidth="0.8" />
+                    {/* جسم البندقية الخشبي المطعم بالفضة */}
+                    <rect x="32" y="69.5" width="38" height="3.8" rx="1" fill="#78350f" />
+                    {/* الحلقات الفضية المزخرفة على السبطانة */}
+                    <rect x="42" y="69" width="2.5" height="4.8" fill="#e2e8f0" />
+                    <rect x="54" y="69" width="2.5" height="4.8" fill="#e2e8f0" />
+                    <rect x="66" y="69" width="2.5" height="4.8" fill="#e2e8f0" />
+                    {/* ماسورة البندقية الفضية الطويلة (أعلى اليمين) */}
+                    <rect x="36" y="68.2" width="66" height="2" rx="0.8" fill="#94a3b8" stroke="#475569" strokeWidth="0.4" />
+                    {/* زناد ومطرقة المقمع */}
+                    <path d="M35 73 Q37 76 40 73" fill="none" stroke="#475569" strokeWidth="1" />
+                </g>
+
+                {/* اليدان الممسكتان بالبندقية بشكل مبسط */}
+                <circle cx="43" cy="87" r="3.2" fill="#eac0a2" />
+                <circle cx="67" cy="66" r="3.2" fill="#eac0a2" />
+            </svg>
+        );
+
+        // مكون موحد لعرض صورة الشخص بإطار الجنس المناسب (مربع أزرق للذكر / دائري وردي للأنثى)
+        const PersonAvatar = ({ card, sizeClass = "w-16 h-16", imgClassName = "object-cover" }) => {
+            const isFemale = card?.gender === 'female';
+            const shapeClass = isFemale
+                ? 'rounded-full bg-pink-50 border-2 border-pink-300 shadow-pink-100'
+                : 'rounded-2xl bg-sky-50 border-2 border-sky-300 shadow-sky-100';
+
+            return (
+                <div className={`${sizeClass} ${shapeClass} overflow-hidden flex items-center justify-center shadow-sm shrink-0 relative`}>
+                    {card?.image ? (
+                        <>
+                            <img
+                                src={card.image}
+                                alt={card.name || 'صورة'}
+                                className={`w-full h-full ${imgClassName}`}
+                                onError={(e) => {
+                                    e.target.style.display = 'none';
+                                    if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                                }}
+                            />
+                            <div style={{ display: 'none' }} className="w-full h-full">
+                                {isFemale ? <AsiriWomanAvatar /> : <MaleDefaultAvatar />}
+                            </div>
+                        </>
+                    ) : (
+                        isFemale ? <AsiriWomanAvatar /> : <MaleDefaultAvatar />
+                    )}
+                </div>
+            );
+        };
+
+        // دوال مساعدة لتحليل ودمج سلاسل الأسماء العربية والتعرف التلقائي على الجنس عبر "بن" و"بنت"
+        const stripClanSuffix = (fullName) => {
+            if (!fullName) return '';
+            return fullName.replace(/\s*-\s*آل السعيدي\s*-\s*آل سعد\s*-\s*بلّسمر\s*$/g, '').trim();
+        };
+
+        /**
+         * يكتشف الجنس تلقائياً بناءً على وجود كلمة "بنت" أو "بن" في بداية/تسلسل الاسم:
+         * - إذا وُجدت "بنت" قبل الاسم الثاني (الاسم الأول بنت فلان...) -> أنثى ('female')
+         * - إذا وُجدت "بن" (أو "ابن") -> ذكر ('male')
+         * - وإلا يرجع إلى fallbackGender
+         */
+        const detectGenderFromText = (rawText, fallbackGender = 'male') => {
+            if (!rawText || typeof rawText !== 'string') return fallbackGender;
+            const normalized = rawText.replace(/\s+/g, ' ').trim();
+            // مطابقة "بنت" أو "ابنة" كفاصل بين الاسم الأول والذي بعده
+            if (/(?:^|\s)(?:بنت|ابنة)(?:\s|$)/i.test(normalized)) {
+                return 'female';
+            }
+            // مطابقة "بن" أو "ابن" كفاصل بين الاسم الأول والذي بعده أو الثالث والذي بعده وهكذا
+            if (/(?:^|\s)(?:بن|ابن)(?:\s|$)/i.test(normalized)) {
+                return 'male';
+            }
+            return fallbackGender;
+        };
+
+        /**
+         * يقسم النص العربي تلقائياً عند الكلمات الفاصلة (بن / بنت / ابن / ابنة)
+         * مثلاً: "سارة بنت محمد بن علي" -> ["سارة", "محمد", "علي"]
+         * مثلاً: "أحمد بن خالد بن سعيد" -> ["أحمد", "خالد", "سعيد"]
+         */
+        const parseNameParts = (fullName) => {
+            const withoutClan = stripClanSuffix(fullName);
+            if (!withoutClan) return [''];
+            const splitByConnectors = withoutClan
+                .replace(/\s+(?:بن|بنت|ابن|ابنة)\s+/gi, '\n')
+                .split(/\n+/)
+                .map(s => s.trim())
+                .filter(Boolean);
+
+            if (splitByConnectors.length > 1) {
+                return splitByConnectors;
+            }
+
+            const parts = withoutClan.split(/\s+/).filter(Boolean);
+            return parts.length > 0 ? parts : [''];
+        };
+
+        /**
+         * يبني السلسلة الكاملة للاسم:
+         * - الفاصل بعد الاسم الأول يعتمد على الجنس ("بنت" للأنثى، "بن" للذكر)
+         * - الفواصل بين الأسماء اللاحقة (الثاني والذي بعده، الثالث والذي بعده وهكذا) تكون "بن"
+         * - يلحق المرجع الرئيسي الموحد "آل السعيدي - آل سعد - بلّسمر" عند الطلب
+         */
+        const buildFullName = (parts, gender = 'male', includeClan = true) => {
+            const validParts = parts.map(p => p.trim()).filter(Boolean);
+            if (validParts.length === 0) return '';
+            const firstConnector = gender === 'female' ? 'بنت' : 'بن';
+            let personChain = validParts[0];
+            for (let i = 1; i < validParts.length; i++) {
+                const conn = i === 1 ? firstConnector : 'بن';
+                personChain += ` ${conn} ${validParts[i]}`;
+            }
+            return includeClan ? `${personChain} - ${CLAN_ROOT_TITLE}` : personChain;
+        };
+
         // --- المكون الرئيسي للتطبيق ---
         function App() {
           const [cards, setCards] = useState([]);
@@ -67,12 +371,41 @@
           const [quizQueue, setQuizQueue] = useState([]);
           const [quizShowInfo, setQuizShowInfo] = useState(false);
 
-          // حالات البحث والفلترة والمجلدات
+          // حالات البحث والفلترة والمجلدات والمشجرة
           const [searchQuery, setSearchQuery] = useState('');
-          const [selectedTagsFilter, setSelectedTagsFilter] = useState([]);
-          const [showFilterDropdown, setShowFilterDropdown] = useState(false);
-          const [viewMode, setViewMode] = useState('all'); // 'all', 'folders'
+          const [viewMode, setViewMode] = useState('all'); // 'all', 'folders', 'tree'
           const [activeFolder, setActiveFolder] = useState(null);
+
+          // حالات المشجرة الهرمية (تفتح المشجرة الرئيسية مباشرة، والتبويب الفرعي 'ALL' يعرض الجميع)
+          const [activeTreeSubTab, setActiveTreeSubTab] = useState('ALL');
+          const [newTreeTitle, setNewTreeTitle] = useState('');
+          const [newTreeRootName, setNewTreeRootName] = useState('');
+          const [newTreeRootGender, setNewTreeRootGender] = useState('male');
+          const [showNewTreeModal, setShowNewTreeModal] = useState(false);
+
+          // نافذة الإضافة السريعة لفرع تحت شخص في المشجرة
+          const [quickBranchParent, setQuickBranchParent] = useState(null);
+          const [quickBranchName, setQuickBranchName] = useState('');
+          const [quickBranchGender, setQuickBranchGender] = useState('male');
+          const [isSavingBranch, setIsSavingBranch] = useState(false);
+          const [treeZoom, setTreeZoom] = useState(1);
+
+          // نافذة تأكيد الحذف المخصصة (بدلاً من window.confirm)
+          const [deleteConfirmCard, setDeleteConfirmCard] = useState(null);
+
+          // إشعار مخصص بدلاً من alert()
+          const [toastMessage, setToastMessage] = useState(null);
+          const showNotification = (msg, type = 'info') => {
+              setToastMessage({ msg, type });
+              setTimeout(() => setToastMessage(null), 4000);
+          };
+
+          // خريطة سريعة للوصول لأي بطاقة عبر المعرف
+          const cardsMap = useMemo(() => {
+              const map = new Map();
+              cards.forEach(c => map.set(c.id, c));
+              return map;
+          }, [cards]);
 
           // تهيئة تسجيل الدخول المجهول وجلب البيانات
           useEffect(() => {
@@ -115,19 +448,26 @@
             return () => unsubscribe();
           }, [user]);
 
+          // تحديث البطاقة المختارة تلقائياً إذا تغيرت في قاعدة البيانات
+          useEffect(() => {
+              if (selectedCard) {
+                  const updated = cards.find(c => c.id === selectedCard.id);
+                  if (updated) setSelectedCard(updated);
+              }
+          }, [cards]);
+
           // معالجة البيانات للمجلدات والفلترة
-          const allAvailableTags = Array.from(new Set(cards.flatMap(c => c.tags || [])));
+          const allAvailableTags = useMemo(() => {
+              return Array.from(new Set(cards.flatMap(c => c.tags || [])));
+          }, [cards]);
+
           const filteredCards = cards.filter(card => {
             const searchLower = searchQuery.toLowerCase();
-            const matchesSearch = !searchQuery ||
+            return !searchQuery ||
               (card.name && card.name.toLowerCase().includes(searchLower)) ||
+              (card.firstName && card.firstName.toLowerCase().includes(searchLower)) ||
               (card.description && card.description.toLowerCase().includes(searchLower)) ||
               (card.tags && card.tags.some(t => t.toLowerCase().includes(searchLower)));
-
-            const matchesTags = selectedTagsFilter.length === 0 ||
-              selectedTagsFilter.every(tag => card.tags && card.tags.includes(tag));
-
-            return matchesSearch && matchesTags;
           });
 
           const folders = {};
@@ -139,11 +479,47 @@
             });
           });
 
+          // استخراج سلسلة النسب الكاملة لأي بطاقة في المشجرة (من الشخص صعوداً إلى الجد الأعلى)
+          const getLineageChain = (card, allCardsMap) => {
+              const chain = [];
+              let current = card;
+              const visited = new Set();
+              while (current && !visited.has(current.id)) {
+                  visited.add(current.id);
+                  const fName = current.firstName || parseNameParts(current.name)[0] || '';
+                  if (fName) chain.push(fName);
+                  current = current.parentId ? allCardsMap.get(current.parentId) : null;
+              }
+              if (chain.length <= 1 && card?.name) {
+                  const parsed = parseNameParts(card.name);
+                  if (parsed.length > 1) return parsed;
+              }
+              return chain;
+          };
+
+          // الجنس الفعلي للبطاقة مع مراعاة الكشف التلقائي من الاسم إذا لم يكن محدداً
+          const getEffectiveGender = (card) => {
+              if (!card) return 'male';
+              return detectGenderFromText(card.name || '', card.gender || 'male');
+          };
+
+          // الاسم الكامل المعروض للبطاقة متصلاً دائماً بـ "آل السعيدي - آل سعد - بلّسمر"
+          const getDisplayFullName = (card) => {
+              if (!card) return 'بدون اسم';
+              const chain = getLineageChain(card, cardsMap);
+              const gender = getEffectiveGender(card);
+              if (chain.length > 0 && chain[0]) {
+                  return buildFullName(chain, gender, true);
+              }
+              const base = stripClanSuffix(card.name);
+              return base ? `${base} - ${CLAN_ROOT_TITLE}` : CLAN_ROOT_TITLE;
+          };
+
           // دوال الاختبار
           const startQuiz = (specificCards = null) => {
             const cardsToQuiz = specificCards || (filteredCards.length > 0 ? filteredCards : []);
             if (cardsToQuiz.length === 0) {
-              alert("لا توجد بطاقات لبدء الاختبار.");
+              showNotification("لا توجد بطاقات لبدء الاختبار.", "error");
               return;
             }
             const shuffledCards = [...cardsToQuiz].sort(() => Math.random() - 0.5);
@@ -184,36 +560,125 @@
             setQuizShowInfo(false);
           };
 
-          // دوال حفظ وحذف البطاقات
-          const handleSaveCard = async (cardData, isEdit, id) => {
+          // حفظ أو تعديل بطاقة مع دعم تسلسل النسب والربط التلقائي بالمشجرة والجذر الرئيسي
+          const handleSaveCard = async (cardData, isEdit, id, nameParts = []) => {
             try {
+              let resolvedParentId = cardData.parentId || null;
+              let resolvedTags = [...(cardData.tags || [])];
+
+              if (activeTreeSubTab !== 'ALL' && !resolvedTags.includes(activeTreeSubTab)) {
+                  resolvedTags.push(activeTreeSubTab);
+              }
+
+              const effectiveGender = detectGenderFromText(cardData.name || '', cardData.gender || 'male');
+              const cleanParts = nameParts.map(p => p.trim()).filter(Boolean);
+              const firstName = cleanParts[0] || cardData.firstName || parseNameParts(cardData.name)[0] || '';
+              const fullName = cleanParts.length > 0
+                  ? buildFullName(cleanParts, effectiveGender, true)
+                  : (cardData.name ? `${stripClanSuffix(cardData.name)} - ${CLAN_ROOT_TITLE}` : '');
+
+              // البحث عن مطابقة لسلسلة الآباء في المشجرة الموجودة (بدءاً من الاسم الثاني)
+              if (cleanParts.length > 1) {
+                  const ancestorSequence = cleanParts.slice(1);
+                  
+                  let matchedParent = null;
+                  for (const candidate of cards) {
+                      if (isEdit && candidate.id === id) continue;
+                      const candidateChain = getLineageChain(candidate, cardsMap);
+                      const isMatch = ancestorSequence.every((part, idx) => 
+                          candidateChain[idx] && candidateChain[idx].trim() === part
+                      );
+                      if (isMatch && candidateChain.length >= ancestorSequence.length) {
+                          matchedParent = candidate;
+                          break;
+                      }
+                  }
+
+                  if (matchedParent) {
+                      resolvedParentId = matchedParent.id;
+                      if (matchedParent.tags && matchedParent.tags.length > 0) {
+                          matchedParent.tags.forEach(t => {
+                              if (!resolvedTags.includes(t)) resolvedTags.push(t);
+                          });
+                      }
+                  } else {
+                      // لم يوجد تسلسل مطابق: إنشاء العقد الأبوية المفقودة من الأعلى للأسفل تحت الجذر الرئيسي
+                      let currentParentId = null;
+                      for (let i = cleanParts.length - 1; i >= 1; i--) {
+                          const ancestorFirst = cleanParts[i];
+                          const subChain = cleanParts.slice(i);
+                          const existingAncestor = cards.find(c => 
+                              (!isEdit || c.id !== id) &&
+                              (c.firstName === ancestorFirst || parseNameParts(c.name)[0] === ancestorFirst) &&
+                              (c.parentId || null) === currentParentId
+                          );
+
+                          if (existingAncestor) {
+                              currentParentId = existingAncestor.id;
+                          } else {
+                              const newAncestorRef = doc(collection(db, "flashcards"));
+                              await setDoc(newAncestorRef, {
+                                  name: buildFullName(subChain, 'male', true),
+                                  firstName: ancestorFirst,
+                                  gender: 'male',
+                                  parentId: currentParentId,
+                                  tags: resolvedTags,
+                                  description: '',
+                                  image: '',
+                                  correctCount: 0,
+                                  wrongCount: 0,
+                                  userId: user?.uid || 'anonymous'
+                              });
+                              currentParentId = newAncestorRef.id;
+                          }
+                      }
+                      resolvedParentId = currentParentId;
+                  }
+              }
+
+              const finalPayload = {
+                  ...cardData,
+                  name: fullName,
+                  firstName: firstName,
+                  gender: effectiveGender,
+                  parentId: resolvedParentId,
+                  tags: resolvedTags
+              };
+
               if (isEdit) {
-                await updateDoc(doc(db, "flashcards", id), cardData);
+                await updateDoc(doc(db, "flashcards", id), finalPayload);
+                showNotification("تم حفظ التعديلات بنجاح", "success");
               } else {
                 const newDocRef = doc(collection(db, "flashcards"));
                 await setDoc(newDocRef, { 
-                  ...cardData, 
+                  ...finalPayload, 
                   correctCount: 0, 
                   wrongCount: 0,
                   userId: user?.uid || 'anonymous'
                 });
+                showNotification("تمت إضافة البطاقة وربطها بمشجرة آل السعيدي بنجاح", "success");
               }
               setView('gallery');
               setEditingCard(null);
             } catch (error) {
               console.error("Error saving card:", error);
-              alert("حدث خطأ أثناء الحفظ. تأكد من إعدادات وصلاحيات قاعدة بيانات Firestore.");
+              showNotification("حدث خطأ أثناء الحفظ. تأكد من صلاحيات Firestore.", "error");
             }
           };
 
-          const handleDeleteCard = async (id) => {
-            if (window.confirm("هل أنت متأكد من حذف هذه البطاقة؟")) {
-              try {
-                await deleteDoc(doc(db, "flashcards", id));
-                setSelectedCard(null);
-              } catch (error) {
-                console.error("Error deleting card:", error);
+          const executeDeleteCard = async (id) => {
+            try {
+              const children = cards.filter(c => c.parentId === id);
+              for (const child of children) {
+                  await updateDoc(doc(db, "flashcards", child.id), { parentId: null });
               }
+              await deleteDoc(doc(db, "flashcards", id));
+              setDeleteConfirmCard(null);
+              setSelectedCard(null);
+              showNotification("تم حذف البطاقة بنجاح", "success");
+            } catch (error) {
+              console.error("Error deleting card:", error);
+              showNotification("حدث خطأ أثناء الحذف", "error");
             }
           };
 
@@ -223,16 +688,211 @@
             setView('edit');
           };
 
-          // --- مكون نموذج إضافة/تعديل بطاقة ---
+          // إنشاء فرع مجلد جديد تحت المشجرة الرئيسية (آل السعيدي - آل سعد - بلّسمر)
+          const handleCreateNewTree = async (e) => {
+              e.preventDefault();
+              const title = newTreeTitle.trim();
+              const rootName = newTreeRootName.trim();
+              if (!title || !rootName) {
+                  showNotification("يرجى إدخال اسم الفرع/المجلد واسم الجد الأول", "error");
+                  return;
+              }
+              try {
+                  const detectedGender = detectGenderFromText(rootName, newTreeRootGender);
+                  const parts = parseNameParts(rootName);
+                  const firstName = parts[0] || rootName;
+                  const newRootRef = doc(collection(db, "flashcards"));
+                  await setDoc(newRootRef, {
+                      name: buildFullName(parts, detectedGender, true),
+                      firstName,
+                      gender: detectedGender,
+                      parentId: null,
+                      tags: [title],
+                      description: '',
+                      image: '',
+                      correctCount: 0,
+                      wrongCount: 0,
+                      userId: user?.uid || 'anonymous'
+                  });
+                  setNewTreeTitle('');
+                  setNewTreeRootName('');
+                  setNewTreeRootGender('male');
+                  setShowNewTreeModal(false);
+                  setActiveTreeSubTab(title);
+                  showNotification(`تم إنشاء فرع "${title}" تحت ${CLAN_ROOT_TITLE}`, "success");
+              } catch (err) {
+                  console.error(err);
+                  showNotification("حدث خطأ أثناء إنشاء الفرع", "error");
+              }
+          };
+
+          // إضافة فرع (ابن/بنت) سريع تحت شخص في المشجرة
+          const handleAddQuickBranch = async (e) => {
+              e.preventDefault();
+              const rawInput = quickBranchName.trim();
+              if (!rawInput || !quickBranchParent) {
+                  showNotification("يرجى كتابة الاسم للفرع الجديد", "error");
+                  return;
+              }
+              setIsSavingBranch(true);
+              try {
+                  const detectedGender = detectGenderFromText(rawInput, quickBranchGender);
+                  const parsedInput = parseNameParts(rawInput);
+                  const childFirst = parsedInput[0] || rawInput;
+                  const parentChain = getLineageChain(quickBranchParent, cardsMap);
+                  const fullChain = [childFirst, ...parentChain];
+                  const fullName = buildFullName(fullChain, detectedGender, true);
+                  const parentTags = quickBranchParent.tags && quickBranchParent.tags.length > 0
+                      ? [...quickBranchParent.tags]
+                      : (activeTreeSubTab !== 'ALL' ? [activeTreeSubTab] : []);
+
+                  const newChildRef = doc(collection(db, "flashcards"));
+                  await setDoc(newChildRef, {
+                      name: fullName,
+                      firstName: childFirst,
+                      gender: detectedGender,
+                      parentId: quickBranchParent.id,
+                      tags: parentTags,
+                      description: '',
+                      image: '',
+                      correctCount: 0,
+                      wrongCount: 0,
+                      userId: user?.uid || 'anonymous'
+                  });
+
+                  setQuickBranchName('');
+                  setQuickBranchGender('male');
+                  setQuickBranchParent(null);
+                  showNotification(`تمت إضافة "${childFirst}" (${detectedGender === 'female' ? 'أنثى - بنت' : 'ذكر - بن'}) كفرع في المشجرة`, "success");
+              } catch (err) {
+                  console.error(err);
+                  showNotification("حدث خطأ أثناء إضافة الفرع", "error");
+              } finally {
+                  setIsSavingBranch(false);
+              }
+          };
+
+          // --- مكون نموذج إضافة/تعديل بطاقة مع التعرف التلقائي على فواصل "بن" و"بنت" والجنس ---
           const CardFormView = ({ initialData, onSave }) => {
             const isEdit = !!initialData;
-            const [name, setName] = useState(initialData?.name || '');
+            
+            const initialParts = useMemo(() => {
+                if (!initialData) return ['', '', ''];
+                const chain = getLineageChain(initialData, cardsMap);
+                return chain.length >= 2 ? chain : [...chain, '', ''];
+            }, [initialData]);
+
+            const [nameParts, setNameParts] = useState(initialParts);
+            const [gender, setGender] = useState(initialData ? getEffectiveGender(initialData) : 'male');
+            const [genderLockedByUser, setGenderLockedByUser] = useState(false);
             const [description, setDescription] = useState(initialData?.description || '');
             const [image, setImage] = useState(initialData?.image || '');
             const [imageFile, setImageFile] = useState(null);
             const [isUploading, setIsUploading] = useState(false);
-            const [tags, setTags] = useState(initialData?.tags || []);
+            const [tags, setTags] = useState(
+                initialData?.tags || (activeTreeSubTab !== 'ALL' ? [activeTreeSubTab] : [])
+            );
             const [tagInput, setTagInput] = useState('');
+            const [focusedPartIndex, setFocusedPartIndex] = useState(null);
+            const [autoSplitNotice, setAutoSplitNotice] = useState('');
+
+            // دالة تعالج النص عند كتابة عبارة مثل "فاطمة بنت سعد بن علي" أو "سالم بن راشد بن حمد"
+            const applySmartNameParsing = (rawVal, slotIndex) => {
+                const hasExplicitConnector = /\s+(?:بن|بنت|ابن|ابنة)(?:\s+|$)/i.test(rawVal);
+                if (hasExplicitConnector) {
+                    const detected = detectGenderFromText(rawVal, gender);
+                    const splitParts = parseNameParts(rawVal);
+                    const prefix = nameParts.slice(0, slotIndex).map(p => p.trim()).filter(Boolean);
+                    const merged = [...prefix, ...splitParts];
+                    setNameParts(merged.length > 0 ? merged : ['']);
+                    if (!genderLockedByUser) {
+                        setGender(detected);
+                    }
+                    setAutoSplitNotice(
+                        `تم الفصل التلقائي عند "${detected === 'female' ? 'بنت' : 'بن'}" وتحديد الجنس: ${detected === 'female' ? 'أنثى' : 'ذكر'}`
+                    );
+                    return true;
+                }
+                return false;
+            };
+
+            const handleGenderSelect = (selectedGender) => {
+                setGender(selectedGender);
+                setGenderLockedByUser(true);
+            };
+
+            const existingLineages = useMemo(() => {
+                return cards.map(c => ({
+                    card: c,
+                    chain: getLineageChain(c, cardsMap),
+                    fullName: c.name || ''
+                })).filter(item => item.chain.length > 0);
+            }, [cards]);
+
+            const autocompleteSuggestions = useMemo(() => {
+                if (focusedPartIndex === null || focusedPartIndex === 0) return [];
+                const currentTyped = (nameParts[focusedPartIndex] || '').trim();
+                if (!currentTyped) return [];
+
+                const matches = [];
+                const seenKeys = new Set();
+
+                existingLineages.forEach(({ card, chain }) => {
+                    if (isEdit && card.id === initialData.id) return;
+                    if (chain[0] && chain[0].includes(currentTyped)) {
+                        const key = chain.join('-');
+                        if (!seenKeys.has(key)) {
+                            seenKeys.add(key);
+                            matches.push({ card, chain });
+                        }
+                    }
+                });
+                return matches.slice(0, 6);
+            }, [focusedPartIndex, nameParts, existingLineages]);
+
+            const matchedAncestorCard = useMemo(() => {
+                const ancestorSeq = nameParts.slice(1).map(p => p.trim()).filter(Boolean);
+                if (ancestorSeq.length === 0) return null;
+                for (const { card, chain } of existingLineages) {
+                    if (isEdit && card.id === initialData.id) continue;
+                    const isMatch = ancestorSeq.every((part, idx) => chain[idx] === part);
+                    if (isMatch && chain.length >= ancestorSeq.length) {
+                        return card;
+                    }
+                }
+                return null;
+            }, [nameParts, existingLineages]);
+
+            const handlePartChange = (index, value) => {
+                if (applySmartNameParsing(value, index)) {
+                    return;
+                }
+                const updated = [...nameParts];
+                updated[index] = value;
+                setNameParts(updated);
+            };
+
+            const handleSelectAutocomplete = (index, selectedChain) => {
+                const prefix = nameParts.slice(0, index);
+                const merged = [...prefix, ...selectedChain];
+                setNameParts(merged);
+                setFocusedPartIndex(null);
+
+                const matchedNode = existingLineages.find(l => l.chain.join('-') === selectedChain.join('-'))?.card;
+                if (matchedNode?.tags?.length > 0) {
+                    const newTags = Array.from(new Set([...tags, ...matchedNode.tags]));
+                    setTags(newTags);
+                }
+            };
+
+            const handleAddNameSlot = () => {
+                setNameParts([...nameParts, '']);
+            };
+
+            const handleRemoveNameSlot = (idx) => {
+                if (nameParts.length <= 1) return;
+                setNameParts(nameParts.filter((_, i) => i !== idx));
+            };
 
             const handleImageUpload = (e) => {
               const file = e.target.files[0];
@@ -274,7 +934,6 @@
               setTags(tags.filter(t => t !== tagToRemove));
             };
 
-            // ضغط الصورة وتحويلها لنص
             const compressImageToBase64 = (file) => {
               return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -309,9 +968,9 @@
 
             const handleSave = async (e) => {
               e.preventDefault();
-              // السماح بالحفظ إذا كان هناك حقل واحد على الأقل ممتلئ
-              if (!name && !image && !description && !imageFile) {
-                alert("الرجاء تعبئة حقل واحد على الأقل (الاسم، الصورة، أو الوصف) لإنشاء البطاقة!");
+              const hasAnyName = nameParts.some(p => p.trim() !== '');
+              if (!hasAnyName && !image && !description && !imageFile) {
+                showNotification("الرجاء تعبئة حقل واحد على الأقل (الاسم، الصورة، أو الوصف)!", "error");
                 return;
               }
               
@@ -322,18 +981,34 @@
                 if (imageFile) {
                   finalImageUrl = await compressImageToBase64(imageFile);
                 }
-                await onSave({ name, description, image: finalImageUrl, tags }, isEdit, initialData?.id);
+                const fullName = buildFullName(nameParts, gender, true);
+                await onSave(
+                    { 
+                        name: fullName, 
+                        firstName: nameParts[0]?.trim() || '',
+                        gender,
+                        description, 
+                        image: finalImageUrl, 
+                        tags,
+                        parentId: initialData?.parentId || null
+                    }, 
+                    isEdit, 
+                    initialData?.id,
+                    nameParts
+                );
               } catch (error) {
                 console.error("Error processing image:", error);
-                alert("حدث خطأ أثناء حفظ الصورة.");
+                showNotification("حدث خطأ أثناء حفظ الصورة.", "error");
               } finally {
                 setIsUploading(false);
               }
             };
 
+            const previewFullName = buildFullName(nameParts, gender, true);
+
             return (
-              <div onPaste={handlePaste} className="max-w-2xl mx-auto bg-white p-8 rounded-3xl shadow-sm border border-gray-100 animate-in slide-in-from-bottom-4 mt-8">
-                <div className="flex items-center justify-between mb-8">
+              <div onPaste={handlePaste} className="max-w-2xl mx-auto bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-gray-100 animate-in slide-in-from-bottom-4 mt-4 sm:mt-8">
+                <div className="flex items-center justify-between mb-6">
                   <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
                     <span className="bg-blue-100 text-blue-600 p-2 rounded-xl">
                       {isEdit ? <Edit size={24} /> : <Plus size={24} />}
@@ -346,19 +1021,170 @@
                 </div>
 
                 <form onSubmit={handleSave} className="space-y-6">
+                  {/* اختيار الجنس */}
                   <div>
-                    <label className="block text-gray-700 font-bold mb-2">الاسم / العنوان</label>
-                    <input 
-                      type="text" 
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition bg-gray-50 focus:bg-white"
-                      placeholder="مثال: الخوارزمي"
-                    />
+                    <label className="block text-gray-700 font-bold mb-2">الجنس (يُحدد تلقائياً عند كتابة "بن" أو "بنت")</label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <button
+                        type="button"
+                        onClick={() => handleGenderSelect('male')}
+                        className={`p-3.5 rounded-2xl border-2 flex items-center gap-3 transition ${
+                          gender === 'male'
+                            ? 'border-sky-500 bg-sky-50/80 text-sky-900 shadow-sm'
+                            : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'
+                        }`}
+                      >
+                        <div className="w-12 h-12 rounded-xl bg-sky-100 border-2 border-sky-300 overflow-hidden shrink-0">
+                          <MaleDefaultAvatar />
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-base">ذكر (بن)</div>
+                          <div className="text-xs text-sky-600">مربع أزرق (زي جنوبي وبندقية)</div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleGenderSelect('female')}
+                        className={`p-3.5 rounded-2xl border-2 flex items-center gap-3 transition ${
+                          gender === 'female'
+                            ? 'border-pink-500 bg-pink-50/80 text-pink-900 shadow-sm'
+                            : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'
+                        }`}
+                      >
+                        <div className="w-12 h-12 rounded-full bg-pink-100 border-2 border-pink-300 overflow-hidden shrink-0">
+                          <AsiriWomanAvatar />
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-base">أنثى (بنت)</div>
+                          <div className="text-xs text-pink-600">دائري وردي (لبس عسيري)</div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* تسلسل الأسماء (الاسم الأول - الاسم الثاني - الاسم الثالث...) مع التعرف التلقائي على (بن) و(بنت) */}
+                  <div className="bg-gray-50/80 p-4 rounded-2xl border border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-gray-800 font-bold flex items-center gap-2">
+                        <GitFork size={18} className="text-blue-600" />
+                        تسلسل الاسم (الاسم الأول - الثاني - الثالث...)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleAddNameSlot}
+                        className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition"
+                      >
+                        <Plus size={14} /> إضافة اسم أب/جد
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-3">
+                      يمكنك كتابة الاسم كاملاً مثل <span className="font-bold text-gray-700">"نورة بنت محمد بن سعيد"</span> أو <span className="font-bold text-gray-700">"فهد بن سعد بن علي"</span> وسيتم فصله تلقائياً وتحديد الجنس.
+                    </p>
+
+                    {autoSplitNotice && (
+                      <div className="mb-3 bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-bold px-3 py-2 rounded-xl flex items-center justify-between">
+                        <span className="flex items-center gap-1.5"><Sparkles size={14} className="text-indigo-600" /> {autoSplitNotice}</span>
+                        <button type="button" onClick={() => setAutoSplitNotice('')} className="text-indigo-400 hover:text-indigo-700">
+                          <X size={14} />
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2 relative">
+                      {nameParts.map((part, idx) => (
+                        <React.Fragment key={idx}>
+                          {idx > 0 && (
+                            <span className={`text-xs font-black px-2 py-0.5 rounded-md ${
+                              idx === 1 && gender === 'female'
+                                ? 'bg-pink-100 text-pink-700'
+                                : 'bg-sky-100 text-sky-700'
+                            }`}>
+                              {idx === 1 ? (gender === 'female' ? 'بنت' : 'بن') : 'بن'}
+                            </span>
+                          )}
+                          <div className="relative flex-1 min-w-[110px]">
+                            <input
+                              type="text"
+                              value={part}
+                              onFocus={() => setFocusedPartIndex(idx)}
+                              onBlur={() => setTimeout(() => setFocusedPartIndex(null), 200)}
+                              onChange={(e) => handlePartChange(idx, e.target.value)}
+                              placeholder={
+                                idx === 0 ? 'الاسم الأول' :
+                                idx === 1 ? 'الاسم الثاني (الأب)' :
+                                idx === 2 ? 'الاسم الثالث (الجد)' : `الاسم ${idx + 1}`
+                              }
+                              className={`w-full border rounded-xl px-3 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 transition ${
+                                idx === 0
+                                  ? 'border-blue-300 bg-white focus:ring-blue-500 text-gray-900'
+                                  : 'border-gray-200 bg-white focus:ring-indigo-500 text-gray-700'
+                              }`}
+                            />
+                            {idx > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveNameSlot(idx)}
+                                className="absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-red-500 p-0.5"
+                                title="حذف هذه الخانة"
+                              >
+                                <X size={14} />
+                              </button>
+                            )}
+
+                            {/* قائمة الإكمال التلقائي من المشجرة */}
+                            {focusedPartIndex === idx && autocompleteSuggestions.length > 0 && (
+                              <div className="absolute z-30 right-0 mt-1 w-64 bg-white rounded-2xl shadow-xl border border-blue-100 overflow-hidden animate-in fade-in">
+                                <div className="bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-700 flex items-center gap-1">
+                                  <Sparkles size={12} /> تسلسلات موجودة في المشجرة:
+                                </div>
+                                {autocompleteSuggestions.map(({ card, chain }) => (
+                                  <button
+                                    key={card.id}
+                                    type="button"
+                                    onMouseDown={() => handleSelectAutocomplete(idx, chain)}
+                                    className="w-full text-right px-3 py-2.5 hover:bg-blue-50/70 transition border-b border-gray-50 last:border-0 flex items-center justify-between gap-2"
+                                  >
+                                    <div>
+                                      <div className="text-sm font-bold text-gray-800">{chain.join(' بن ')}</div>
+                                      {card.tags?.[0] && (
+                                        <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                                          فرع: {card.tags[0]}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <ChevronRight size={14} className="text-gray-400 rotate-180" />
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </React.Fragment>
+                      ))}
+                    </div>
+
+                    {previewFullName && (
+                      <div className="mt-3 pt-3 border-t border-gray-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                        <div className="text-gray-600">
+                          الاسم الكامل في البطاقة: <span className="font-black text-gray-900 text-sm">{previewFullName}</span>
+                        </div>
+                        {nameParts.slice(1).some(p => p.trim()) && (
+                          matchedAncestorCard ? (
+                            <span className="bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full font-bold inline-flex items-center gap-1 w-fit">
+                              <Check size={12} /> سيرتبط تلقائياً كفرع لـ ({matchedAncestorCard.firstName || parseNameParts(matchedAncestorCard.name)[0]})
+                            </span>
+                          ) : (
+                            <span className="bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full font-bold inline-flex items-center gap-1 w-fit">
+                              <GitFork size={12} /> سينشئ تسلسل جديد تحت {CLAN_ROOT_TITLE}
+                            </span>
+                          )
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div>
-                    <label className="block text-gray-700 font-bold mb-2">التصنيفات (المجلدات)</label>
+                    <label className="block text-gray-700 font-bold mb-2">التصنيفات (المجلدات / تبويبات المشجرة)</label>
                     <div className="w-full border border-gray-200 rounded-xl p-3 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition bg-gray-50 focus-within:bg-white">
                       <div className="flex flex-wrap gap-2 mb-2">
                         {tags.map(tag => (
@@ -373,14 +1199,18 @@
                         value={tagInput}
                         onChange={(e) => setTagInput(e.target.value)}
                         onKeyDown={handleAddTag}
+                        list="existing-tags-list"
                         className="w-full bg-transparent outline-none placeholder-gray-400 mt-1"
-                        placeholder="اكتب اسم المجلد واضغط Enter لإضافته..."
+                        placeholder="اكتب اسم المجلد أو الفرع واضغط Enter..."
                       />
+                      <datalist id="existing-tags-list">
+                        {allAvailableTags.map(t => <option key={t} value={t} />)}
+                      </datalist>
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-gray-700 font-bold mb-2">الصورة</label>
+                    <label className="block text-gray-700 font-bold mb-2">الصورة (اختياري - تظهر صورة تراثية موحدة حسب الجنس)</label>
                     <div className="flex flex-col gap-4">
                       <input 
                         type="url" 
@@ -391,21 +1221,22 @@
                         dir="ltr"
                       />
                       <div className="flex items-center justify-center w-full">
-                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition">
-                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                            <ImageIcon className="w-8 h-8 mb-3 text-gray-400" />
-                            <p className="mb-2 text-sm text-gray-500 font-medium">اضغط لرفع صورة من جهازك</p>
-                            <p className="text-xs text-gray-400 mt-1">يمكنك أيضاً لصق الصورة مباشرة (Ctrl+V)</p>
+                        <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition">
+                          <div className="flex flex-col items-center justify-center pt-4 pb-5">
+                            <ImageIcon className="w-7 h-7 mb-2 text-gray-400" />
+                            <p className="text-sm text-gray-500 font-medium">اضغط لرفع صورة من جهازك أو الصقها (Ctrl+V)</p>
                           </div>
                           <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
                         </label>
                       </div>
                     </div>
-                    {image && (
-                      <div className="mt-4 w-32 h-32 rounded-xl overflow-hidden border border-gray-200 shadow-sm mx-auto bg-gray-100">
-                        <img src={image} alt="Preview" className="w-full h-full object-contain" onError={(e) => { e.target.style.display='none'; }} />
-                      </div>
-                    )}
+                    <div className="mt-4 flex justify-center">
+                      <PersonAvatar
+                        card={{ image, gender, name: previewFullName }}
+                        sizeClass="w-28 h-28"
+                        imgClassName="object-contain"
+                      />
+                    </div>
                   </div>
 
                   <div>
@@ -413,7 +1244,7 @@
                     <textarea 
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition bg-gray-50 focus:bg-white h-32 resize-none"
+                      className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition bg-gray-50 focus:bg-white h-28 resize-none"
                       placeholder="اكتب نبذة أو أي معلومات ترغب في حفظها..."
                     />
                   </div>
@@ -429,6 +1260,249 @@
                 </form>
               </div>
             );
+          };
+
+          // --- مكون عقدة الشجرة الهرمية المتداخلة (Recursive Tree Node) ---
+          const TreeNodeItem = ({ node, childrenMap }) => {
+              const children = childrenMap.get(node.id) || [];
+              const firstNameDisplay = node.firstName || parseNameParts(node.name)[0] || 'بدون اسم';
+              const isFemale = getEffectiveGender(node) === 'female';
+
+              return (
+                  <li>
+                      <div className="group relative flex flex-col items-center">
+                          {/* بطاقة الشخص المصغرة في المشجرة (الصورة والاسم الأول فقط) */}
+                          <div
+                              onClick={() => { setSelectedCard(node); setGalleryShowInfo(false); }}
+                              title={`عرض بطاقة: ${getDisplayFullName(node)}`}
+                              className={`cursor-pointer p-2.5 rounded-2xl border-2 transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 flex flex-col items-center min-w-[92px] max-w-[115px] bg-white ${
+                                  isFemale
+                                      ? 'border-pink-200 hover:border-pink-400 bg-gradient-to-b from-white to-pink-50/40'
+                                      : 'border-sky-200 hover:border-sky-400 bg-gradient-to-b from-white to-sky-50/40'
+                              }`}
+                          >
+                              <PersonAvatar card={node} sizeClass="w-14 h-14" />
+                              <span className="mt-2 font-extrabold text-sm text-gray-800 truncate w-full text-center">
+                                  {firstNameDisplay}
+                              </span>
+                          </div>
+
+                          {/* زر إضافة فرع (ابن/بنت) تحت هذا الشخص مباشرة */}
+                          <button
+                              type="button"
+                              onClick={(e) => {
+                                  e.stopPropagation();
+                                  setQuickBranchParent(node);
+                                  setQuickBranchName('');
+                                  setQuickBranchGender('male');
+                              }}
+                              title={`إضافة فرع (ابن/بنت) لـ ${firstNameDisplay}`}
+                              className={`mt-1.5 w-6 h-6 rounded-full flex items-center justify-center text-white shadow-sm transition-transform hover:scale-110 active:scale-95 z-10 ${
+                                  isFemale ? 'bg-pink-500 hover:bg-pink-600' : 'bg-sky-500 hover:bg-sky-600'
+                              }`}
+                          >
+                              <Plus size={14} strokeWidth={3} />
+                          </button>
+                      </div>
+
+                      {/* الأبناء والأحفاد المتفرعون للأسفل */}
+                      {children.length > 0 && (
+                          <ul>
+                              {children.map(child => (
+                                  <TreeNodeItem
+                                      key={child.id}
+                                      node={child}
+                                      childrenMap={childrenMap}
+                                  />
+                              ))}
+                          </ul>
+                      )}
+                  </li>
+              );
+          };
+
+          // --- مكون عرض المشجرة الهرمية (تفتح المشجرة الرئيسية مباشرة + تبويبات فرعية للمجلدات) ---
+          const renderTreeView = () => {
+              const treeMembers = activeTreeSubTab === 'ALL'
+                  ? filteredCards
+                  : filteredCards.filter(c => (c.tags || []).includes(activeTreeSubTab));
+
+              const memberIdsSet = new Set(treeMembers.map(m => m.id));
+
+              const childrenMap = new Map();
+              treeMembers.forEach(member => {
+                  if (member.parentId && memberIdsSet.has(member.parentId)) {
+                      if (!childrenMap.has(member.parentId)) childrenMap.set(member.parentId, []);
+                      childrenMap.get(member.parentId).push(member);
+                  }
+              });
+
+              const roots = treeMembers.filter(m => !m.parentId || !memberIdsSet.has(m.parentId));
+
+              return (
+                  <div className="animate-in fade-in duration-300">
+                      {/* شريط أدوات المشجرة الرئيسية */}
+                      <div className="flex flex-wrap items-center justify-between gap-4 mb-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                          <div className="flex items-center gap-3">
+                              <div className="bg-indigo-100 text-indigo-700 p-2.5 rounded-xl">
+                                  <GitFork size={22} />
+                              </div>
+                              <div>
+                                  <h2 className="text-lg sm:text-xl font-black text-gray-800">
+                                      مشجرة {CLAN_ROOT_TITLE}
+                                  </h2>
+                                  <p className="text-xs text-gray-500">
+                                      {activeTreeSubTab === 'ALL'
+                                          ? `عرض جميع أفراد وفروع المشجرة (${treeMembers.length} فرد)`
+                                          : `عرض فرع / مجلد: ${activeTreeSubTab} (${treeMembers.length} فرد)`}
+                                  </p>
+                              </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-wrap">
+                              <div className="flex items-center bg-gray-100 rounded-xl p-1">
+                                  <button
+                                      onClick={() => setTreeZoom(z => Math.max(0.5, +(z - 0.1).toFixed(1)))}
+                                      className="p-2 hover:bg-white rounded-lg text-gray-600 transition"
+                                      title="تصغير"
+                                  >
+                                      <ZoomOut size={16} />
+                                  </button>
+                                  <span className="px-2 text-xs font-bold text-gray-600">{Math.round(treeZoom * 100)}%</span>
+                                  <button
+                                      onClick={() => setTreeZoom(z => Math.min(1.5, +(z + 0.1).toFixed(1)))}
+                                      className="p-2 hover:bg-white rounded-lg text-gray-600 transition"
+                                      title="تكبير"
+                                  >
+                                      <ZoomIn size={16} />
+                                  </button>
+                              </div>
+
+                              <button
+                                  onClick={() => startQuiz(treeMembers)}
+                                  className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl hover:bg-emerald-700 transition font-bold text-sm"
+                              >
+                                  <Play size={16} fill="currentColor" /> اختبار المعروض
+                              </button>
+
+                              <button
+                                  onClick={() => setShowNewTreeModal(true)}
+                                  className="flex items-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-4 py-2 rounded-xl transition font-bold text-sm"
+                              >
+                                  <Plus size={16} /> إضافة فرع/مجلد جديد
+                              </button>
+                          </div>
+                      </div>
+
+                      {/* شريط التبويبات الفرعية للانتقال السريع بين المشجرة الرئيسية والمجلدات */}
+                      <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-4 custom-scrollbar">
+                          <button
+                              onClick={() => setActiveTreeSubTab('ALL')}
+                              className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition flex items-center gap-2 border ${
+                                  activeTreeSubTab === 'ALL'
+                                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                              }`}
+                          >
+                              <Users size={16} /> الكل (المشجرة الرئيسية)
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${activeTreeSubTab === 'ALL' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                                  {filteredCards.length}
+                              </span>
+                          </button>
+
+                          {allAvailableTags.map(tag => {
+                              const count = filteredCards.filter(c => (c.tags || []).includes(tag)).length;
+                              const isActive = activeTreeSubTab === tag;
+                              return (
+                                  <button
+                                      key={tag}
+                                      onClick={() => setActiveTreeSubTab(tag)}
+                                      className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition flex items-center gap-2 border ${
+                                          isActive
+                                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                              : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                                      }`}
+                                  >
+                                      <Folder size={15} /> {tag}
+                                      <span className={`text-xs px-2 py-0.5 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                                          {count}
+                                      </span>
+                                  </button>
+                              );
+                          })}
+                      </div>
+
+                      {/* لوحة رسم الشجرة الهرمية من الأعلى للأسفل */}
+                      <div className="bg-white rounded-3xl border border-gray-200 shadow-inner p-6 sm:p-10 overflow-x-auto custom-scrollbar min-h-[500px] flex justify-center items-start">
+                          <div
+                              className="tree-wrapper transition-transform origin-top"
+                              style={{ transform: `scale(${treeZoom})` }}
+                          >
+                              <div className="tree">
+                                  <ul>
+                                      {/* العقدة الجذرية العليا الموحدة لجميع أفراد وفروع الشجرة */}
+                                      <li>
+                                          <div className="flex flex-col items-center">
+                                              <div className="bg-gradient-to-l from-indigo-900 via-blue-900 to-indigo-800 text-white px-7 py-3.5 rounded-2xl shadow-lg border-2 border-amber-300/60 flex flex-col items-center">
+                                                  <span className="text-[11px] text-amber-300 font-bold tracking-wide mb-0.5">
+                                                      المرجع الرئيسي للمشجرة
+                                                  </span>
+                                                  <span className="text-lg sm:text-xl font-black tracking-tight">
+                                                      {CLAN_ROOT_TITLE}
+                                                  </span>
+                                                  {activeTreeSubTab !== 'ALL' && (
+                                                      <span className="mt-1 bg-white/15 text-white text-xs px-3 py-0.5 rounded-full font-bold">
+                                                          فرع: {activeTreeSubTab}
+                                                      </span>
+                                                  )}
+                                              </div>
+
+                                              <button
+                                                  type="button"
+                                                  onClick={() => setView('add')}
+                                                  title="إضافة فرع مباشر تحت آل السعيدي - آل سعد - بلّسمر"
+                                                  className="mt-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm flex items-center gap-1 transition"
+                                              >
+                                                  <Plus size={13} strokeWidth={3} /> إضافة جد / فرع
+                                              </button>
+                                          </div>
+
+                                          {/* تفرع جميع الجذور والأفراد من المرجع الرئيسي إلى الأسفل */}
+                                          {roots.length > 0 ? (
+                                              <ul>
+                                                  {roots.map(rootNode => (
+                                                      <TreeNodeItem
+                                                          key={rootNode.id}
+                                                          node={rootNode}
+                                                          childrenMap={childrenMap}
+                                                      />
+                                                  ))}
+                                              </ul>
+                                          ) : (
+                                              <div className="mt-8 text-center text-gray-400 text-sm bg-gray-50 px-6 py-4 rounded-2xl border border-dashed border-gray-200">
+                                                  لا يوجد أفراد في هذا التبويب بعد. اضغط على "إضافة جد / فرع" للبدء.
+                                              </div>
+                                          )}
+                                      </li>
+                                  </ul>
+                              </div>
+                          </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap items-center justify-center gap-6 text-xs text-gray-500 bg-white py-3 px-4 rounded-2xl border border-gray-100">
+                          <span className="flex items-center gap-2">
+                              <span className="w-4 h-4 rounded bg-sky-100 border border-sky-300 inline-block"></span> ذكر (مربع أزرق - زي جنوبي وبندقية)
+                          </span>
+                          <span className="flex items-center gap-2">
+                              <span className="w-4 h-4 rounded-full bg-pink-100 border border-pink-300 inline-block"></span> أنثى (دائري وردي - لبس عسيري)
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                              <span className="w-4 h-4 rounded-full bg-sky-500 text-white inline-flex items-center justify-center"><Plus size={10} /></span>
+                              اضغط زر الإضافة أسفل أي شخص لتفريع ابن/بنت له مباشرة
+                          </span>
+                      </div>
+                  </div>
+              );
           };
 
           // --- مكون المعرض ---
@@ -465,17 +1539,19 @@
                     >
                       <Plus size={20} /> إضافة بطاقة
                     </button>
-                    <label className="flex items-center cursor-pointer gap-3 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100">
-                      <div className="relative">
-                        <input type="checkbox" className="sr-only" checked={showNames} onChange={() => setShowNames(!showNames)} />
-                        <div className={`block w-12 h-6 rounded-full transition ${showNames ? 'bg-blue-500' : 'bg-gray-300'}`}></div>
-                        <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition transform ${showNames ? 'translate-x-6' : ''}`}></div>
-                      </div>
-                      <span className="text-gray-700 font-medium select-none text-sm">إظهار الأسماء</span>
-                    </label>
+                    {viewMode !== 'tree' && (
+                      <label className="flex items-center cursor-pointer gap-3 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100">
+                        <div className="relative">
+                          <input type="checkbox" className="sr-only" checked={showNames} onChange={() => setShowNames(!showNames)} />
+                          <div className={`block w-12 h-6 rounded-full transition ${showNames ? 'bg-blue-500' : 'bg-gray-300'}`}></div>
+                          <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition transform ${showNames ? 'translate-x-6' : ''}`}></div>
+                        </div>
+                        <span className="text-gray-700 font-medium select-none text-sm">إظهار الأسماء</span>
+                      </label>
+                    )}
                   </div>
                   
-                  <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto mt-4 sm:mt-0">
+                  <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto mt-2 sm:mt-0">
                     {viewMode === 'folders' && activeFolder && (
                       <button
                         onClick={() => startQuiz(folders[activeFolder])}
@@ -509,20 +1585,29 @@
                   <div className="flex bg-gray-100 p-1.5 rounded-xl w-full md:w-auto">
                     <button
                       onClick={() => { setViewMode('all'); setActiveFolder(null); }}
-                      className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition flex justify-center items-center gap-2 ${viewMode === 'all' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
+                      className={`flex-1 md:flex-none px-5 py-2 rounded-lg text-sm font-bold transition flex justify-center items-center gap-2 ${viewMode === 'all' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
                     >
                       <ImageIcon size={18} /> كل الصور
                     </button>
                     <button
-                      onClick={() => setViewMode('folders')}
-                      className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition flex justify-center items-center gap-2 ${viewMode === 'folders' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
+                      onClick={() => { setViewMode('folders'); }}
+                      className={`flex-1 md:flex-none px-5 py-2 rounded-lg text-sm font-bold transition flex justify-center items-center gap-2 ${viewMode === 'folders' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
                     >
                       <Folder size={18} /> مجلدات
+                    </button>
+                    <button
+                      onClick={() => { setViewMode('tree'); setActiveFolder(null); setActiveTreeSubTab('ALL'); }}
+                      className={`flex-1 md:flex-none px-5 py-2 rounded-lg text-sm font-bold transition flex justify-center items-center gap-2 ${viewMode === 'tree' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-900'}`}
+                    >
+                      <GitFork size={18} /> مشجرة
                     </button>
                   </div>
                 </div>
 
-                {cards.length === 0 ? (
+                {/* وضع المشجرة الهرمية */}
+                {viewMode === 'tree' ? (
+                  renderTreeView()
+                ) : cards.length === 0 ? (
                   <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-300">
                     <ImageIcon className="mx-auto text-gray-300 mb-4" size={64} />
                     <h2 className="text-xl text-gray-500 font-medium">لا توجد بطاقات حتى الآن</h2>
@@ -531,33 +1616,35 @@
                   <>
                     {viewMode === 'all' && (
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                        {filteredCards.map(card => (
-                          <div 
-                            key={card.id} 
-                            onClick={() => { setSelectedCard(card); setGalleryShowInfo(false); }}
-                            className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden border border-gray-100 transform hover:-translate-y-1 flex flex-col"
-                          >
-                            <div className="aspect-square w-full overflow-hidden bg-gray-50 relative p-2">
-                              <img 
-                                src={card.image || 'https://via.placeholder.com/400x400?text=بدون+صورة'} 
-                                alt={card.name || 'بدون اسم'} 
-                                className="w-full h-full object-contain transition duration-500 group-hover:scale-105 rounded-xl"
-                                onError={(e) => { e.target.src = 'https://via.placeholder.com/400x400?text=بدون+صورة'; }}
-                              />
+                        {filteredCards.map(card => {
+                          const isFemale = getEffectiveGender(card) === 'female';
+                          return (
+                            <div 
+                              key={card.id} 
+                              onClick={() => { setSelectedCard(card); setGalleryShowInfo(false); }}
+                              className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden border border-gray-100 transform hover:-translate-y-1 flex flex-col"
+                            >
+                              <div className={`aspect-square w-full overflow-hidden relative p-3 flex items-center justify-center ${isFemale ? 'bg-pink-50/40' : 'bg-sky-50/40'}`}>
+                                <PersonAvatar
+                                  card={{ ...card, gender: isFemale ? 'female' : 'male' }}
+                                  sizeClass="w-full h-full"
+                                  imgClassName="object-contain transition duration-500 group-hover:scale-105"
+                                />
+                              </div>
+                              
+                              <div className={`p-4 transition-all duration-300 flex flex-col justify-center flex-grow ${showNames ? 'opacity-100 h-auto' : 'opacity-0 h-0 p-0 overflow-hidden'}`}>
+                                <h3 className="font-bold text-gray-800 text-center truncate" title={getDisplayFullName(card)}>{getDisplayFullName(card)}</h3>
+                                {card.tags && card.tags.length > 0 && (
+                                  <div className="flex justify-center gap-1 mt-2 flex-wrap">
+                                    {card.tags.slice(0, 2).map(tag => (
+                                      <span key={tag} className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">#{tag}</span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            
-                            <div className={`p-4 transition-all duration-300 flex flex-col justify-center flex-grow ${showNames ? 'opacity-100 h-auto' : 'opacity-0 h-0 p-0 overflow-hidden'}`}>
-                              <h3 className="font-bold text-gray-800 text-center truncate">{card.name || 'بدون اسم'}</h3>
-                              {card.tags && card.tags.length > 0 && (
-                                <div className="flex justify-center gap-1 mt-2 flex-wrap">
-                                  {card.tags.slice(0, 2).map(tag => (
-                                    <span key={tag} className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">#{tag}</span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
 
@@ -595,25 +1682,27 @@
                           </h2>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                          {folders[activeFolder]?.map(card => (
-                            <div 
-                              key={card.id} 
-                              onClick={() => { setSelectedCard(card); setGalleryShowInfo(false); }}
-                              className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden border border-gray-100 transform hover:-translate-y-1 flex flex-col"
-                            >
-                              <div className="aspect-square w-full overflow-hidden bg-gray-50 relative p-2">
-                                <img 
-                                  src={card.image || 'https://via.placeholder.com/400x400?text=بدون+صورة'} 
-                                  alt={card.name || 'بدون اسم'} 
-                                  className="w-full h-full object-contain transition duration-500 group-hover:scale-105 rounded-xl"
-                                  onError={(e) => { e.target.src = 'https://via.placeholder.com/400x400?text=بدون+صورة'; }}
-                                />
+                          {folders[activeFolder]?.map(card => {
+                            const isFemale = getEffectiveGender(card) === 'female';
+                            return (
+                              <div 
+                                key={card.id} 
+                                onClick={() => { setSelectedCard(card); setGalleryShowInfo(false); }}
+                                className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden border border-gray-100 transform hover:-translate-y-1 flex flex-col"
+                              >
+                                <div className={`aspect-square w-full overflow-hidden relative p-3 flex items-center justify-center ${isFemale ? 'bg-pink-50/40' : 'bg-sky-50/40'}`}>
+                                  <PersonAvatar
+                                    card={{ ...card, gender: isFemale ? 'female' : 'male' }}
+                                    sizeClass="w-full h-full"
+                                    imgClassName="object-contain transition duration-500 group-hover:scale-105"
+                                  />
+                                </div>
+                                <div className={`p-4 transition-all duration-300 flex flex-col justify-center flex-grow ${showNames ? 'opacity-100 h-auto' : 'opacity-0 h-0 p-0 overflow-hidden'}`}>
+                                  <h3 className="font-bold text-gray-800 text-center truncate">{getDisplayFullName(card)}</h3>
+                                </div>
                               </div>
-                              <div className={`p-4 transition-all duration-300 flex flex-col justify-center flex-grow ${showNames ? 'opacity-100 h-auto' : 'opacity-0 h-0 p-0 overflow-hidden'}`}>
-                                <h3 className="font-bold text-gray-800 text-center truncate">{card.name || 'بدون اسم'}</h3>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -624,7 +1713,7 @@
                 {selectedCard && (
                   <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 lg:p-10 animate-in fade-in">
                     <div className="bg-white rounded-[2rem] w-full max-w-2xl p-6 shadow-2xl relative flex flex-col max-h-[90vh] overflow-y-auto">
-                      <div className="w-full flex justify-between items-center mb-6">
+                      <div className="w-full flex justify-between items-center mb-4">
                         <div className="flex gap-3">
                           <button 
                             onClick={() => handleEditCard(selectedCard)}
@@ -633,7 +1722,7 @@
                             <Edit size={20} /> <span className="hidden sm:inline">تعديل</span>
                           </button>
                           <button 
-                            onClick={() => handleDeleteCard(selectedCard.id)}
+                            onClick={() => setDeleteConfirmCard(selectedCard)}
                             className="bg-red-50 text-red-600 hover:bg-red-100 p-3 rounded-xl transition shadow-sm flex items-center gap-2 font-bold"
                           >
                             <Trash2 size={20} /> <span className="hidden sm:inline">حذف</span>
@@ -646,26 +1735,36 @@
                           <X size={20} />
                         </button>
                       </div>
+
+                      {/* الاسم الكامل يظهر بوضوح في أعلى البطاقة المكبرة */}
+                      <div className="text-center mb-4">
+                        <h3 className="text-xl sm:text-2xl font-black text-gray-800 leading-relaxed">
+                          {getDisplayFullName(selectedCard)}
+                        </h3>
+                        {selectedCard.tags && selectedCard.tags.length > 0 && (
+                          <div className="flex justify-center flex-wrap gap-1.5 mt-2">
+                            {selectedCard.tags.map(tag => (
+                              <span key={tag} className="bg-indigo-50 text-indigo-700 px-3 py-0.5 rounded-full text-xs font-bold">
+                                #{tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       
-                      <div className="w-full h-[50vh] min-h-[400px] rounded-3xl overflow-hidden bg-gray-50 relative border border-gray-100 mb-6 flex items-center justify-center p-4">
+                      <div className="w-full h-[45vh] min-h-[340px] rounded-3xl overflow-hidden bg-gray-50 relative border border-gray-100 mb-6 flex items-center justify-center p-4">
                         {!galleryShowInfo ? (
-                          <img 
-                            src={selectedCard.image || 'https://via.placeholder.com/800x800?text=بدون+صورة'} 
-                            alt={selectedCard.name || 'بدون اسم'} 
-                            className="w-full h-full object-contain animate-in fade-in zoom-in duration-300"
-                            onError={(e) => { e.target.src = 'https://via.placeholder.com/800x800?text=بدون+صورة'; }}
-                          />
+                          <div className="w-full h-full flex items-center justify-center animate-in fade-in zoom-in duration-300">
+                            <PersonAvatar
+                              card={{ ...selectedCard, gender: getEffectiveGender(selectedCard) }}
+                              sizeClass="w-72 h-72 sm:w-80 sm:h-80"
+                              imgClassName="object-contain"
+                            />
+                          </div>
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300 overflow-y-auto">
-                            <h3 className="text-3xl font-black text-gray-800 mb-4">{selectedCard.name || 'بدون اسم'}</h3>
-                            <p className="text-gray-600 text-lg leading-relaxed mb-4">{selectedCard.description || 'لا يوجد وصف'}</p>
-                            {selectedCard.tags && selectedCard.tags.length > 0 && (
-                              <div className="flex justify-center flex-wrap gap-2">
-                                {selectedCard.tags.map(tag => (
-                                  <span key={tag} className="bg-white border border-gray-200 text-gray-600 px-3 py-1 rounded-full text-sm font-medium">#{tag}</span>
-                                ))}
-                              </div>
-                            )}
+                            <h3 className="text-2xl font-black text-gray-800 mb-4">{getDisplayFullName(selectedCard)}</h3>
+                            <p className="text-gray-600 text-lg leading-relaxed mb-4">{selectedCard.description || 'لا يوجد وصف مضاف لهذه البطاقة بعد'}</p>
                           </div>
                         )}
                       </div>
@@ -679,14 +1778,203 @@
 
                       <div className="flex w-full gap-4">
                         <div className="flex-1 bg-green-50 border border-green-100 rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm">
-                          <span className="text-3xl font-black text-green-600 mb-1">{selectedCard.correctCount}</span>
+                          <span className="text-3xl font-black text-green-600 mb-1">{selectedCard.correctCount || 0}</span>
                           <span className="text-green-800 text-sm font-bold flex items-center gap-1"><Check size={16}/> إجابة صحيحة</span>
                         </div>
                         <div className="flex-1 bg-red-50 border border-red-100 rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm">
-                          <span className="text-3xl font-black text-red-600 mb-1">{selectedCard.wrongCount}</span>
+                          <span className="text-3xl font-black text-red-600 mb-1">{selectedCard.wrongCount || 0}</span>
                           <span className="text-red-800 text-sm font-bold flex items-center gap-1"><X size={16}/> إجابة خاطئة</span>
                         </div>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* نافذة تأكيد الحذف المخصصة */}
+                {deleteConfirmCard && (
+                  <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in">
+                    <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl text-center">
+                      <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Trash2 size={32} />
+                      </div>
+                      <h3 className="text-xl font-black text-gray-800 mb-2">حذف البطاقة؟</h3>
+                      <p className="text-sm text-gray-600 mb-6">
+                        هل أنت متأكد من حذف بطاقة <span className="font-bold text-gray-900">"{getDisplayFullName(deleteConfirmCard)}"</span>؟
+                      </p>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => setDeleteConfirmCard(null)}
+                          className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 rounded-xl transition"
+                        >
+                          إلغاء
+                        </button>
+                        <button
+                          onClick={() => executeDeleteCard(deleteConfirmCard.id)}
+                          className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl transition"
+                        >
+                          نعم، احذف
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* نافذة إنشاء فرع/مجلد جديد تحت آل السعيدي - آل سعد - بلّسمر */}
+                {showNewTreeModal && (
+                  <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+                    <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h3 className="text-xl font-black text-gray-800 flex items-center gap-2">
+                            <GitFork className="text-indigo-600" /> إضافة فرع / مجلد جديد
+                          </h3>
+                          <p className="text-xs text-indigo-600 font-bold mt-0.5">يتبع لـ: {CLAN_ROOT_TITLE}</p>
+                        </div>
+                        <button onClick={() => setShowNewTreeModal(false)} className="text-gray-400 hover:text-gray-700 p-2 rounded-xl bg-gray-100">
+                          <X size={18} />
+                        </button>
+                      </div>
+                      <form onSubmit={handleCreateNewTree} className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-1.5">اسم الفرع / المجلد (سيظهر في التبويبات)</label>
+                          <input
+                            type="text"
+                            value={newTreeTitle}
+                            onChange={(e) => setNewTreeTitle(e.target.value)}
+                            placeholder="مثال: فرع آل محمد / الجيل الأول"
+                            className="w-full border border-gray-200 rounded-xl px-4 py-3 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-1.5">اسم الجذر / الجد الأول في هذا الفرع</label>
+                          <input
+                            type="text"
+                            value={newTreeRootName}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setNewTreeRootName(val);
+                              const detected = detectGenderFromText(val, null);
+                              if (detected) setNewTreeRootGender(detected);
+                            }}
+                            placeholder="مثال: عبدالعزيز أو نورة بنت سعد"
+                            className="w-full border border-gray-200 rounded-xl px-4 py-3 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-1.5">الجنس</label>
+                          <div className="grid grid-cols-2 gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setNewTreeRootGender('male')}
+                              className={`p-2.5 rounded-xl border-2 font-bold text-sm flex items-center justify-center gap-2 ${newTreeRootGender === 'male' ? 'border-sky-500 bg-sky-50 text-sky-800' : 'border-gray-200 text-gray-600'}`}
+                            >
+                              <span className="w-4 h-4 rounded bg-sky-400 inline-block"></span> ذكر
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setNewTreeRootGender('female')}
+                              className={`p-2.5 rounded-xl border-2 font-bold text-sm flex items-center justify-center gap-2 ${newTreeRootGender === 'female' ? 'border-pink-500 bg-pink-50 text-pink-800' : 'border-gray-200 text-gray-600'}`}
+                            >
+                              <span className="w-4 h-4 rounded-full bg-pink-400 inline-block"></span> أنثى
+                            </button>
+                          </div>
+                        </div>
+                        <button
+                          type="submit"
+                          className="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl hover:bg-indigo-700 transition shadow-md mt-2"
+                        >
+                          إنشاء الفرع وفتحه في المشجرة
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                )}
+
+                {/* نافذة إضافة فرع سريع تحت شخص في المشجرة (الاسم فقط + الجنس) */}
+                {quickBranchParent && (
+                  <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+                    <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-black text-gray-800 flex items-center gap-2">
+                          <Plus className="text-blue-600" /> إضافة فرع جديد
+                        </h3>
+                        <button onClick={() => setQuickBranchParent(null)} className="text-gray-400 hover:text-gray-700 p-2 rounded-xl bg-gray-100">
+                          <X size={18} />
+                        </button>
+                      </div>
+
+                      <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200 mb-4 flex items-center gap-3">
+                        <PersonAvatar card={quickBranchParent} sizeClass="w-12 h-12" />
+                        <div>
+                          <div className="text-xs text-gray-500">إضافة ابن / بنت لـ:</div>
+                          <div className="font-bold text-gray-800 text-sm">{getDisplayFullName(quickBranchParent)}</div>
+                        </div>
+                      </div>
+
+                      <form onSubmit={handleAddQuickBranch} className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-1.5">الاسم الأول للفرع (أو اسم متبوع بـ بن / بنت)</label>
+                          <input
+                            type="text"
+                            autoFocus
+                            value={quickBranchName}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setQuickBranchName(val);
+                              const detected = detectGenderFromText(val, null);
+                              if (detected) setQuickBranchGender(detected);
+                            }}
+                            placeholder="مثال: خالد أو سارة بنت خالد..."
+                            className="w-full border border-gray-200 rounded-xl px-4 py-3 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-bold"
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-1.5">الجنس</label>
+                          <div className="grid grid-cols-2 gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setQuickBranchGender('male')}
+                              className={`p-3 rounded-xl border-2 font-bold text-sm flex items-center justify-center gap-2 transition ${
+                                quickBranchGender === 'male'
+                                  ? 'border-sky-500 bg-sky-50 text-sky-900'
+                                  : 'border-gray-200 text-gray-600'
+                              }`}
+                            >
+                              <div className="w-7 h-7 rounded-lg overflow-hidden border border-sky-300"><MaleDefaultAvatar /></div>
+                              ذكر (ابن)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setQuickBranchGender('female')}
+                              className={`p-3 rounded-xl border-2 font-bold text-sm flex items-center justify-center gap-2 transition ${
+                                quickBranchGender === 'female'
+                                  ? 'border-pink-500 bg-pink-50 text-pink-900'
+                                  : 'border-gray-200 text-gray-600'
+                              }`}
+                            >
+                              <div className="w-7 h-7 rounded-full overflow-hidden border border-pink-300"><AsiriWomanAvatar /></div>
+                              أنثى (بنت)
+                            </button>
+                          </div>
+                        </div>
+
+                        <p className="text-xs text-gray-400">
+                          * سيتم إنشاء بطاقته بباقي البيانات فارغة ويمكنك تعديلها وإضافة صورته لاحقاً عند الضغط عليه.
+                        </p>
+
+                        <button
+                          type="submit"
+                          disabled={isSavingBranch}
+                          className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 transition shadow-md flex items-center justify-center gap-2 disabled:opacity-60"
+                        >
+                          {isSavingBranch && <Loader2 className="animate-spin" size={18} />}
+                          إضافة للمشجرة
+                        </button>
+                      </form>
                     </div>
                   </div>
                 )}
@@ -707,7 +1995,7 @@
                     onClick={() => setView('gallery')}
                     className="bg-gray-900 text-white px-8 py-3 rounded-xl hover:bg-gray-800 transition font-bold text-lg mt-4"
                   >
-                    العودة للمجلدات
+                    العودة للمعرض
                   </button>
                 </div>
               );
@@ -723,18 +2011,18 @@
                 </div>
 
                 <div className="bg-white p-4 rounded-[2rem] shadow-xl border border-gray-100 w-full mb-6 relative">
-                  <div className="w-full h-[50vh] min-h-[400px] rounded-3xl overflow-hidden bg-gray-50 relative border border-gray-100 flex items-center justify-center p-4">
+                  <div className="w-full h-[50vh] min-h-[380px] rounded-3xl overflow-hidden bg-gray-50 relative border border-gray-100 flex items-center justify-center p-4">
                     {!quizShowInfo ? (
-                      <img 
-                        key={currentCard.id}
-                        src={currentCard.image || 'https://via.placeholder.com/800x800?text=بدون+صورة'} 
-                        alt="Quiz Card" 
-                        className="w-full h-full object-contain animate-in fade-in zoom-in duration-300"
-                        onError={(e) => { e.target.src = 'https://via.placeholder.com/800x800?text=بدون+صورة'; }}
-                      />
+                      <div className="w-full h-full flex items-center justify-center animate-in fade-in zoom-in duration-300">
+                        <PersonAvatar
+                          card={{ ...currentCard, gender: getEffectiveGender(currentCard) }}
+                          sizeClass="w-72 h-72 sm:w-80 sm:h-80"
+                          imgClassName="object-contain"
+                        />
+                      </div>
                     ) : (
                       <div key={`info-${currentCard.id}`} className="w-full h-full flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300 overflow-y-auto">
-                        <h3 className="text-3xl font-black text-gray-800 mb-4">{currentCard.name || 'بدون اسم'}</h3>
+                        <h3 className="text-2xl sm:text-3xl font-black text-gray-800 mb-4 leading-relaxed">{getDisplayFullName(currentCard)}</h3>
                         <p className="text-gray-600 text-lg leading-relaxed mb-4">{currentCard.description || 'لا يوجد وصف'}</p>
                       </div>
                     )}
@@ -776,6 +2064,16 @@
 
           return (
             <div>
+              {/* إشعار عائم */}
+              {toastMessage && (
+                <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-6 py-3.5 rounded-2xl shadow-xl font-bold text-sm flex items-center gap-2 animate-in fade-in slide-in-from-bottom-4 ${
+                  toastMessage.type === 'error' ? 'bg-red-600 text-white' :
+                  toastMessage.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-gray-900 text-white'
+                }`}>
+                  {toastMessage.msg}
+                </div>
+              )}
+
               <header className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
                   <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('gallery')}>
