@@ -136,7 +136,6 @@
 
     <!-- كود التطبيق الفعلي -->
     <script type="text/babel" data-type="module">
-        // استدعاء مكتبات React والأيقونات و Firebase من روابط CDN مباشرة
         import React, { useState, useEffect, useMemo, useRef, useCallback } from 'https://esm.sh/react@18';
         import { createRoot } from 'https://esm.sh/react-dom@18/client';
         import { 
@@ -149,7 +148,6 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
         import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-        // إعدادات Firebase الخاصة بمشروعك
         const firebaseConfig = {
           apiKey: "AIzaSyBdqWDx6pdamFR7fRxkWDNpgY_-MydGuow",
           authDomain: "aljamaa-a8dbc.firebaseapp.com",
@@ -160,15 +158,12 @@
           measurementId: "G-ZERHWEC1N7"
         };
 
-        // تهيئة Firebase
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // المرجع الرئيسي الموحد للمشجرة
         const CLAN_ROOT_TITLE = "آل السعيدي - آل سعد - بلّسمر";
 
-        // 1. رسمة امرأة بلبس عسيري تقليدي رمزية بدون وجه مرسومة بالكود (SVG)
         const AsiriWomanAvatar = ({ className = "w-full h-full" }) => (
             <svg viewBox="0 0 120 120" className={className} xmlns="http://www.w3.org/2000/svg">
                 <rect width="120" height="120" fill="#fdf2f8" />
@@ -195,7 +190,6 @@
             </svg>
         );
 
-        // 2. رسمة رجل باللبس السعودي الجنوبي التراثي
         const MaleDefaultAvatar = ({ className = "w-full h-full" }) => (
             <svg viewBox="0 0 120 120" className={className} xmlns="http://www.w3.org/2000/svg">
                 <rect width="120" height="120" fill="#e0f2fe" />
@@ -234,7 +228,6 @@
             </svg>
         );
 
-        // مكون موحد لعرض صورة الشخص بإطار الجنس المناسب
         const PersonAvatar = ({ card, sizeClass = "w-16 h-16", imgClassName = "object-cover" }) => {
             const isFemale = card?.gender === 'female';
             const shapeClass = isFemale
@@ -265,7 +258,6 @@
             );
         };
 
-        // دوال مساعدة لتحليل ودمج سلاسل الأسماء العربية والتعرف التلقائي على الجنس عبر "بن" و"بنت"
         const stripClanSuffix = (fullName) => {
             if (!fullName) return '';
             return fullName.replace(/\s*-\s*آل السعيدي\s*-\s*آل سعد\s*-\s*بلّسمر\s*$/g, '').trim();
@@ -312,48 +304,41 @@
             return includeClan ? `${personChain} - ${CLAN_ROOT_TITLE}` : personChain;
         };
 
-        // --- المكون الرئيسي للتطبيق ---
         function App() {
           const [cards, setCards] = useState([]);
-          const [view, setView] = useState('gallery'); // 'gallery', 'quiz', 'add', 'edit'
+          const [view, setView] = useState('gallery');
           const [showNames, setShowNames] = useState(true);
           const [selectedCard, setSelectedCard] = useState(null);
           const [galleryShowInfo, setGalleryShowInfo] = useState(false);
           const [editingCard, setEditingCard] = useState(null);
 
-          // حالات Firebase
           const [user, setUser] = useState(null);
           const [loadingData, setLoadingData] = useState(true);
           const [authError, setAuthError] = useState('');
           const [dbError, setDbError] = useState('');
 
-          // حالات الاختبار
           const [quizQueue, setQuizQueue] = useState([]);
           const [quizShowInfo, setQuizShowInfo] = useState(false);
 
-          // حالات البحث والفلترة والمجلدات والمشجرة
           const [searchQuery, setSearchQuery] = useState('');
-          const [viewMode, setViewMode] = useState('all'); // 'all', 'folders', 'tree'
+          const [viewMode, setViewMode] = useState('all');
           const [activeFolder, setActiveFolder] = useState(null);
 
-          // حالات المشجرة الهرمية
           const [activeTreeSubTab, setActiveTreeSubTab] = useState('ALL');
           const [newTreeTitle, setNewTreeTitle] = useState('');
           const [newTreeRootName, setNewTreeRootName] = useState('');
           const [newTreeRootGender, setNewTreeRootGender] = useState('male');
           const [showNewTreeModal, setShowNewTreeModal] = useState(false);
 
-          // نافذة الإضافة تحت شخص في المشجرة: خيار بين (جديد) أو (حالي من البطاقات)
           const [quickBranchParent, setQuickBranchParent] = useState(null);
           const [quickBranchMotherId, setQuickBranchMotherId] = useState(null);
-          const [quickBranchMode, setQuickBranchMode] = useState('choose'); // 'choose' | 'new' | 'existing'
+          const [quickBranchMode, setQuickBranchMode] = useState('choose');
           const [quickBranchSearch, setQuickBranchSearch] = useState('');
           const [quickBranchName, setQuickBranchName] = useState('');
           const [quickBranchGender, setQuickBranchGender] = useState('male');
           const [isSavingBranch, setIsSavingBranch] = useState(false);
           const [treeZoom, setTreeZoom] = useState(1);
 
-          // --- حالات السحب والربط بين خط الأبناء والأم (الزوجة) ---
           const [draggingLine, setDraggingLine] = useState(null); 
           const [hoveredWomanId, setHoveredWomanId] = useState(null);
           const [connectorLines, setConnectorLines] = useState([]);
@@ -361,24 +346,74 @@
           const lineAnchorRefs = useRef(new Map());
           const womanCardRefs = useRef(new Map());
 
-          // نافذة تأكيد الحذف المخصصة
           const [deleteConfirmCard, setDeleteConfirmCard] = useState(null);
-
-          // إشعار مخصص
           const [toastMessage, setToastMessage] = useState(null);
+
           const showNotification = (msg, type = 'info') => {
               setToastMessage({ msg, type });
               setTimeout(() => setToastMessage(null), 4000);
           };
 
-          // خريطة سريعة للوصول لأي بطاقة عبر المعرف
           const cardsMap = useMemo(() => {
               const map = new Map();
               cards.forEach(c => map.set(c.id, c));
               return map;
           }, [cards]);
 
-          // تهيئة تسجيل الدخول المجهول وجلب البيانات
+          const getLineageChain = useCallback((card, allCardsMap) => {
+              const chain = [];
+              let current = card;
+              const visited = new Set();
+              while (current && !visited.has(current.id)) {
+                  visited.add(current.id);
+                  const fName = current.firstName || parseNameParts(current.name)[0] || '';
+                  if (fName) chain.push(fName);
+                  current = current.parentId ? allCardsMap.get(current.parentId) : null;
+              }
+              if (chain.length <= 1 && card?.name) {
+                  const parsed = parseNameParts(card.name);
+                  if (parsed.length > 1) return parsed;
+              }
+              return chain;
+          }, []);
+
+          const getEffectiveGender = useCallback((card) => {
+              if (!card) return 'male';
+              return detectGenderFromText(card.name || '', card.gender || 'male');
+          }, []);
+
+          const getDisplayFullName = useCallback((card) => {
+              if (!card) return 'بدون اسم';
+              const chain = getLineageChain(card, cardsMap);
+              const gender = getEffectiveGender(card);
+              if (chain.length > 0 && chain[0]) {
+                  return buildFullName(chain, gender, true);
+              }
+              const base = stripClanSuffix(card.name);
+              return base ? `${base} - ${CLAN_ROOT_TITLE}` : CLAN_ROOT_TITLE;
+          }, [cardsMap, getLineageChain, getEffectiveGender]);
+
+          // حساب البطاقات المرشحة للنقل كابن داخل مستوى المكوّن الرئيسي لتجنب أي خطأ في Hooks
+          const existingCandidateCards = useMemo(() => {
+              if (!quickBranchParent) return [];
+              const forbiddenIds = new Set();
+              let curr = cardsMap.get(quickBranchParent.id);
+              while (curr && !forbiddenIds.has(curr.id)) {
+                  forbiddenIds.add(curr.id);
+                  curr = curr.parentId ? cardsMap.get(curr.parentId) : null;
+              }
+
+              const q = quickBranchSearch.trim().toLowerCase();
+              return cards.filter(c => {
+                  if (forbiddenIds.has(c.id)) return false;
+                  if (!q) return true;
+                  const displayFull = getDisplayFullName(c).toLowerCase();
+                  const first = (c.firstName || '').toLowerCase();
+                  const desc = (c.description || '').toLowerCase();
+                  return displayFull.includes(q) || first.includes(q) || desc.includes(q);
+              });
+          }, [quickBranchParent, quickBranchSearch, cards, cardsMap, getDisplayFullName]);
+
           useEffect(() => {
             const initAuth = async () => {
               try {
@@ -419,7 +454,6 @@
             return () => unsubscribe();
           }, [user]);
 
-          // تحديث البطاقة المختارة تلقائياً إذا تغيرت في قاعدة البيانات
           useEffect(() => {
               if (selectedCard) {
                   const updated = cards.find(c => c.id === selectedCard.id);
@@ -427,7 +461,6 @@
               }
           }, [cards]);
 
-          // معالجة البيانات للمجلدات والفلترة
           const allAvailableTags = useMemo(() => {
               return Array.from(new Set(cards.flatMap(c => c.tags || [])));
           }, [cards]);
@@ -450,41 +483,6 @@
             });
           });
 
-          // استخراج سلسلة النسب الكاملة لأي بطاقة في المشجرة
-          const getLineageChain = (card, allCardsMap) => {
-              const chain = [];
-              let current = card;
-              const visited = new Set();
-              while (current && !visited.has(current.id)) {
-                  visited.add(current.id);
-                  const fName = current.firstName || parseNameParts(current.name)[0] || '';
-                  if (fName) chain.push(fName);
-                  current = current.parentId ? allCardsMap.get(current.parentId) : null;
-              }
-              if (chain.length <= 1 && card?.name) {
-                  const parsed = parseNameParts(card.name);
-                  if (parsed.length > 1) return parsed;
-              }
-              return chain;
-          };
-
-          const getEffectiveGender = (card) => {
-              if (!card) return 'male';
-              return detectGenderFromText(card.name || '', card.gender || 'male');
-          };
-
-          const getDisplayFullName = (card) => {
-              if (!card) return 'بدون اسم';
-              const chain = getLineageChain(card, cardsMap);
-              const gender = getEffectiveGender(card);
-              if (chain.length > 0 && chain[0]) {
-                  return buildFullName(chain, gender, true);
-              }
-              const base = stripClanSuffix(card.name);
-              return base ? `${base} - ${CLAN_ROOT_TITLE}` : CLAN_ROOT_TITLE;
-          };
-
-          // --- دوال العلاقات الزوجية والأمومة والأبناء ---
           const getFatherMarriages = (fatherCard) => {
               if (!fatherCard) return [];
               const explicitMarriages = Array.isArray(fatherCard.marriages) ? [...fatherCard.marriages] : [];
@@ -539,7 +537,6 @@
               return results;
           };
 
-          // ربط خط الأبناء بامرأة كأم وزوجة
           const linkChildrenLineToMother = async (fatherId, sourceMotherId, womanId) => {
               if (!fatherId || !womanId || fatherId === womanId) return;
               const father = cardsMap.get(fatherId);
@@ -648,7 +645,6 @@
               }
           };
 
-          // حساب إحداثيات الخطوط الوردية / الحمراء الغامقة بين بطاقات الأمهات وخطوط أبنائهن في المشجرة
           const recomputeMotherConnectorLines = useCallback(() => {
               if (viewMode !== 'tree' || !treeContainerRef.current) {
                   setConnectorLines([]);
@@ -704,7 +700,6 @@
               };
           }, [recomputeMotherConnectorLines]);
 
-          // مستمعو أحداث السحب والإفلات بالماوس / اللمس لربط خط الأبناء بالأم
           useEffect(() => {
               if (!draggingLine) return;
 
@@ -779,7 +774,6 @@
               });
           };
 
-          // دوال الاختبار
           const startQuiz = (specificCards = null) => {
             const cardsToQuiz = specificCards || (filteredCards.length > 0 ? filteredCards : []);
             if (cardsToQuiz.length === 0) {
@@ -824,7 +818,6 @@
             setQuizShowInfo(false);
           };
 
-          // حفظ أو تعديل بطاقة
           const handleSaveCard = async (cardData, isEdit, id, nameParts = []) => {
             try {
               let resolvedParentId = cardData.parentId || null;
@@ -898,7 +891,7 @@
                   }
               }
 
-              let resolvedMotherId = cardData.motherId !== undefined ? cardData.motherId : (isEdit ? initialData?.motherId || null : null);
+              let resolvedMotherId = cardData.motherId !== undefined ? cardData.motherId : null;
               if (!resolvedMotherId && resolvedParentId) {
                   const fatherObj = cardsMap.get(resolvedParentId);
                   if (fatherObj) {
@@ -966,7 +959,6 @@
             setView('edit');
           };
 
-          // إنشاء فرع مجلد جديد تحت المشجرة الرئيسية
           const handleCreateNewTree = async (e) => {
               e.preventDefault();
               const title = newTreeTitle.trim();
@@ -1004,7 +996,6 @@
               }
           };
 
-          // إغلاق نافذة الإضافة في المشجرة وتصفير الحقول
           const closeQuickBranchModal = () => {
               setQuickBranchParent(null);
               setQuickBranchMotherId(null);
@@ -1014,7 +1005,6 @@
               setQuickBranchGender('male');
           };
 
-          // إضافة فرع جديد (بطاقة جديدة) تحت شخص في المشجرة
           const handleAddQuickBranch = async (e) => {
               e.preventDefault();
               const rawInput = quickBranchName.trim();
@@ -1067,8 +1057,6 @@
               }
           };
 
-          // نقل بطاقة حالية بجميع بياناتها (الصورة، الوصف، التصنيفات، الإحصائيات، والأبناء التابعين لها)
-          // لتصبح ابناً للشخص المختار، مع حذف جميع الأسماء السابقة التي فوق اسمها الأول وإلحاقها بنسب الأب الجديد
           const handleAttachExistingCardAsChild = async (existingCard) => {
               if (!existingCard || !quickBranchParent) return;
               if (existingCard.id === quickBranchParent.id) {
@@ -1078,16 +1066,13 @@
 
               setIsSavingBranch(true);
               try {
-                  // 1. الاحتفاظ بالاسم الأول فقط وحذف جميع الأسماء السابقة التي فوق الاسم الأول
                   const childFirstName = (existingCard.firstName || parseNameParts(existingCard.name)[0] || '').trim();
                   const childGender = getEffectiveGender(existingCard);
 
-                  // 2. بناء النسب الجديد بدءاً من الاسم الأول ثم سلسلة آباء الشخص الذي أُضيف إليه
                   const parentChain = getLineageChain(quickBranchParent, cardsMap);
                   const newFullChain = [childFirstName, ...parentChain];
                   const updatedFullName = buildFullName(newFullChain, childGender, true);
 
-                  // 3. تحديد الأم إذا كانت محددة أو إذا كان للأب زوجة واحدة نشطة
                   let targetMotherId = quickBranchMotherId || null;
                   if (!targetMotherId && getEffectiveGender(quickBranchParent) === 'male') {
                       const activeWives = getFatherMarriages(quickBranchParent).filter(m => m.status !== 'divorced');
@@ -1096,7 +1081,6 @@
                       }
                   }
 
-                  // 4. دمج تصنيفات الأب مع تصنيفات البطاقة الحالية (مع الإبقاء على كافة بياناتها الأخرى كما هي)
                   const mergedTags = Array.from(new Set([
                       ...(existingCard.tags || []),
                       ...(quickBranchParent.tags || []),
@@ -1112,7 +1096,6 @@
                       tags: mergedTags
                   });
 
-                  // 5. تحديث سلاسل أسماء الأبناء والأحفاد التابعين لهذا الشخص المنقول ليتبعوا النسب الجديد تلقائياً
                   const updateDescendantsLineage = async (parentNodeId, currentAncestorChain) => {
                       const directKids = cards.filter(c => c.parentId === parentNodeId);
                       for (const kid of directKids) {
@@ -1144,7 +1127,6 @@
               }
           };
 
-          // --- مكون نموذج إضافة/تعديل بطاقة ---
           const CardFormView = ({ initialData, onSave }) => {
             const isEdit = !!initialData;
             
@@ -1398,7 +1380,6 @@
                 </div>
 
                 <form onSubmit={handleSave} className="space-y-6">
-                  {/* اختيار الجنس */}
                   <div>
                     <label className="block text-gray-700 font-bold mb-2">الجنس (يُحدد تلقائياً عند كتابة "بن" أو "بنت")</label>
                     <div className="grid grid-cols-2 gap-4">
@@ -1440,7 +1421,6 @@
                     </div>
                   </div>
 
-                  {/* تسلسل الأسماء */}
                   <div className="bg-gray-50/80 p-4 rounded-2xl border border-gray-200">
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-gray-800 font-bold flex items-center gap-2">
@@ -1559,7 +1539,6 @@
                     )}
                   </div>
 
-                  {/* اختيار الأم (اختياري) */}
                   {femaleCards.length > 0 && (
                     <div className="bg-pink-50/60 p-4 rounded-2xl border border-pink-200">
                       <label className="block text-pink-900 font-bold mb-1.5 flex items-center gap-2 text-sm">
@@ -1659,7 +1638,6 @@
             );
           };
 
-          // --- مكون عقدة الشجرة الهرمية المتداخلة مع دعم تعدد الزوجات وخطوط الأبناء المستقلة لكل أم ---
           const TreeNodeItem = ({ node, childrenMap }) => {
               const allChildren = childrenMap.get(node.id) || [];
               const firstNameDisplay = node.firstName || parseNameParts(node.name)[0] || 'بدون اسم';
@@ -1702,7 +1680,6 @@
               return (
                   <li>
                       <div className="group relative flex flex-col items-center">
-                          {/* بطاقة الشخص المصغرة في المشجرة */}
                           <div
                               ref={(el) => {
                                   if (isFemale) {
@@ -1731,7 +1708,6 @@
                               </span>
                           </div>
 
-                          {/* أزرار التحكم أسفل الشخص: زر الإضافة (جديد أو حالي) + مقبض السحب لربط خط الأبناء بأم */}
                           <div className="mt-1.5 flex items-center gap-1.5 z-10">
                               <button
                                   type="button"
@@ -1752,7 +1728,6 @@
                                   <Plus size={14} strokeWidth={3} />
                               </button>
 
-                              {/* مقبض السحب من خط الأب لربط أبنائه أو إضافة زوجة جديدة بخط مستقل */}
                               {!isFemale && (
                                   <button
                                       type="button"
@@ -1773,7 +1748,6 @@
                           </div>
                       </div>
 
-                      {/* الحالة 1: الأب لديه زوجة/زوجات مسجلة -> يخرج لكل أم خط أبناء مستقل متصل بها */}
                       {hasMultipleWivesOrMothers ? (
                           <ul>
                               {wifeBundles.map(bundle => {
@@ -1819,7 +1793,6 @@
                                                   <span className="bg-red-700 text-[9px] px-1.5 py-0.2 rounded-full">منفصلان ✕</span>
                                               )}
 
-                                              {/* زر إضافة ابن/بنت مباشرة ضمن خط هذه الأم (جديد أو حالي) */}
                                               <button
                                                   type="button"
                                                   onMouseDown={(e) => e.stopPropagation()}
@@ -1838,7 +1811,6 @@
                                                   <Plus size={10} strokeWidth={3} />
                                               </button>
 
-                                              {/* زر تحديد/إلغاء الانفصال للزوجة */}
                                               {!isUnassigned && (
                                                   <button
                                                       type="button"
@@ -1887,7 +1859,6 @@
               );
           };
 
-          // --- مكون عرض المشجرة الهرمية ---
           const renderTreeView = () => {
               const treeMembers = activeTreeSubTab === 'ALL'
                   ? filteredCards
@@ -1907,7 +1878,6 @@
 
               return (
                   <div className="animate-in fade-in duration-300">
-                      {/* شريط أدوات المشجرة الرئيسية */}
                       <div className="flex flex-wrap items-center justify-between gap-4 mb-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
                           <div className="flex items-center gap-3">
                               <div className="bg-indigo-100 text-indigo-700 p-2.5 rounded-xl">
@@ -1960,7 +1930,6 @@
                           </div>
                       </div>
 
-                      {/* شريط التبويبات الفرعية */}
                       <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-4 custom-scrollbar">
                           <button
                               onClick={() => setActiveTreeSubTab('ALL')}
@@ -1998,13 +1967,11 @@
                           })}
                       </div>
 
-                      {/* لوحة رسم الشجرة الهرمية */}
                       <div
                           ref={treeContainerRef}
                           onScroll={recomputeMotherConnectorLines}
                           className="relative bg-white rounded-3xl border border-gray-200 shadow-inner p-6 sm:p-10 overflow-x-auto custom-scrollbar min-h-[520px] flex justify-center items-start select-none"
                       >
-                          {/* طبقة خطوط الربط التفاعلية بين الأمهات وخطوط الأبناء */}
                           <svg
                               className="absolute inset-0 w-full h-full pointer-events-none z-20"
                               style={{ minWidth: '100%', minHeight: '100%' }}
@@ -2121,7 +2088,6 @@
               );
           };
 
-          // --- مكون المعرض ---
           const renderGallery = () => {
             if (authError || dbError) {
               return (
@@ -2145,7 +2111,6 @@
               );
             }
 
-            // تجهيز البيانات الأسرية للبطاقة المختارة
             const selectedCardIsFemale = selectedCard ? getEffectiveGender(selectedCard) === 'female' : false;
             const selectedCardMother = selectedCard?.motherId ? cardsMap.get(selectedCard.motherId) : null;
             const selectedCardMarriages = selectedCard
@@ -2153,31 +2118,6 @@
                 : [];
             const hasMultipleHusbands = selectedCardIsFemale && selectedCardMarriages.length > 1;
             const hasDivorcedHistory = selectedCardIsFemale && selectedCardMarriages.some(m => m.status === 'divorced');
-
-            // استبعاد الشخص نفسه وأسلافه المباشرين عند اختيار بطاقة حالية لنقلها كابن لمنع الدورات المغلقة في الشجرة
-            const getAncestorIds = (personId) => {
-                const ancestors = new Set();
-                let curr = cardsMap.get(personId);
-                while (curr && !ancestors.has(curr.id)) {
-                    ancestors.add(curr.id);
-                    curr = curr.parentId ? cardsMap.get(curr.parentId) : null;
-                }
-                return ancestors;
-            };
-
-            const existingCandidateCards = useMemo(() => {
-                if (!quickBranchParent) return [];
-                const forbiddenIds = getAncestorIds(quickBranchParent.id);
-                const q = quickBranchSearch.trim().toLowerCase();
-                return cards.filter(c => {
-                    if (forbiddenIds.has(c.id)) return false;
-                    if (!q) return true;
-                    const displayFull = getDisplayFullName(c).toLowerCase();
-                    const first = (c.firstName || '').toLowerCase();
-                    const desc = (c.description || '').toLowerCase();
-                    return displayFull.includes(q) || first.includes(q) || desc.includes(q);
-                });
-            }, [quickBranchParent, quickBranchSearch, cards, cardsMap]);
 
             return (
               <div className="animate-in fade-in duration-300">
@@ -2254,7 +2194,6 @@
                   </div>
                 </div>
 
-                {/* وضع المشجرة الهرمية */}
                 {viewMode === 'tree' ? (
                   renderTreeView()
                 ) : cards.length === 0 ? (
@@ -2359,7 +2298,6 @@
                   </>
                 )}
 
-                {/* نافذة تفاصيل البطاقة المكبرة */}
                 {selectedCard && (
                   <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 lg:p-10 animate-in fade-in">
                     <div className="bg-white rounded-[2rem] w-full max-w-2xl p-6 shadow-2xl relative flex flex-col max-h-[90vh] overflow-y-auto">
@@ -2401,7 +2339,6 @@
                         )}
                       </div>
 
-                      {/* قسم العلاقات الأسرية */}
                       {(selectedCardMother || selectedCardMarriages.length > 0) && (
                         <div className="mb-4 bg-gradient-to-l from-pink-50/80 via-white to-sky-50/70 border border-pink-200 rounded-2xl p-4 space-y-3 text-right">
                           {selectedCardMother && (
@@ -2619,7 +2556,6 @@
                   </div>
                 )}
 
-                {/* نافذة تأكيد الحذف المخصصة */}
                 {deleteConfirmCard && (
                   <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in">
                     <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl text-center">
@@ -2648,7 +2584,6 @@
                   </div>
                 )}
 
-                {/* نافذة إنشاء فرع/مجلد جديد */}
                 {showNewTreeModal && (
                   <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
                     <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
@@ -2721,7 +2656,6 @@
                   </div>
                 )}
 
-                {/* نافذة الإضافة تحت شخص في المشجرة: خيار بين (جديد) أو (اختيار من البطاقات الحالية) */}
                 {quickBranchParent && (
                   <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
                     <div className="bg-white rounded-3xl w-full max-w-lg p-6 shadow-2xl max-h-[90vh] flex flex-col">
@@ -2749,7 +2683,6 @@
                         </button>
                       </div>
 
-                      {/* بطاقة الأب/الشخص الذي يتم الإضافة إليه */}
                       <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200 mb-4 flex items-center gap-3 shrink-0">
                         <PersonAvatar card={{ ...quickBranchParent, gender: getEffectiveGender(quickBranchParent) }} sizeClass="w-12 h-12" />
                         <div>
@@ -2763,7 +2696,6 @@
                         </div>
                       </div>
 
-                      {/* المرحلة 1: التخيير بين (إضافة جديد) أو (إضافة حالي) */}
                       {quickBranchMode === 'choose' && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
                           <button
@@ -2800,7 +2732,6 @@
                         </div>
                       )}
 
-                      {/* المرحلة 2 (أ): إضافة شخص جديد */}
                       {quickBranchMode === 'new' && (
                         <form onSubmit={handleAddQuickBranch} className="space-y-4 overflow-y-auto">
                           {getEffectiveGender(quickBranchParent) === 'male' && getFatherMarriages(quickBranchParent).length > 0 && (
@@ -2884,7 +2815,6 @@
                         </form>
                       )}
 
-                      {/* المرحلة 2 (ب): عرض جميع البطاقات الحالية للاختيار منها ونقلها كابن */}
                       {quickBranchMode === 'existing' && (
                         <div className="flex flex-col flex-1 overflow-hidden">
                           {getEffectiveGender(quickBranchParent) === 'male' && getFatherMarriages(quickBranchParent).length > 0 && (
@@ -2936,7 +2866,6 @@
                               existingCandidateCards.map(candidate => {
                                 const candFirst = candidate.firstName || parseNameParts(candidate.name)[0] || 'بدون اسم';
                                 const candGender = getEffectiveGender(candidate);
-                                const parentFirst = quickBranchParent.firstName || parseNameParts(quickBranchParent.name)[0];
                                 const parentChain = getLineageChain(quickBranchParent, cardsMap);
                                 const previewNewName = buildFullName([candFirst, ...parentChain], candGender, true);
 
@@ -2982,7 +2911,6 @@
             );
           };
 
-          // --- مكون الاختبار ---
           const renderQuiz = () => {
             if (quizQueue.length === 0) {
               return (
@@ -3070,7 +2998,6 @@
 
           return (
             <div>
-              {/* إشعار عائم */}
               {toastMessage && (
                 <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-6 py-3.5 rounded-2xl shadow-xl font-bold text-sm flex items-center gap-2 animate-in fade-in slide-in-from-bottom-4 ${
                   toastMessage.type === 'error' ? 'bg-red-600 text-white' :
@@ -3102,7 +3029,6 @@
           );
         }
 
-        // تشغيل التطبيق في الصفحة
         const root = createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
