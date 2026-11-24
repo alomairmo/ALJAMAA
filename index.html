@@ -32,7 +32,7 @@
             text-align: center;
             list-style-type: none;
             position: relative;
-            padding: 24px 10px 0 10px;
+            padding: 24px 12px 0 12px;
             transition: all 0.3s;
             display: flex;
             flex-direction: column;
@@ -393,7 +393,6 @@
               return base ? `${base} - ${CLAN_ROOT_TITLE}` : CLAN_ROOT_TITLE;
           }, [cardsMap, getLineageChain, getEffectiveGender]);
 
-          // حساب البطاقات المرشحة للنقل كابن داخل مستوى المكوّن الرئيسي لتجنب أي خطأ في Hooks
           const existingCandidateCards = useMemo(() => {
               if (!quickBranchParent) return [];
               const forbiddenIds = new Set();
@@ -483,7 +482,7 @@
             });
           });
 
-          const getFatherMarriages = (fatherCard) => {
+          const getFatherMarriages = useCallback((fatherCard) => {
               if (!fatherCard) return [];
               const explicitMarriages = Array.isArray(fatherCard.marriages) ? [...fatherCard.marriages] : [];
               const seenWives = new Set(explicitMarriages.map(m => m.wifeId));
@@ -499,9 +498,9 @@
               });
 
               return explicitMarriages.filter(m => cardsMap.has(m.wifeId));
-          };
+          }, [cards, cardsMap]);
 
-          const getWomanMarriages = (womanCard) => {
+          const getWomanMarriages = useCallback((womanCard) => {
               if (!womanCard) return [];
               const results = [];
               const seenHusbands = new Set();
@@ -535,7 +534,7 @@
               });
 
               return results;
-          };
+          }, [cards, cardsMap]);
 
           const linkChildrenLineToMother = async (fatherId, sourceMotherId, womanId) => {
               if (!fatherId || !womanId || fatherId === womanId) return;
@@ -645,32 +644,63 @@
               }
           };
 
+          // حساب إحداثيات خطوط الزواج/الأمومة بدقة من حافة بطاقة الأم إلى حافة شارة خط الأبناء
           const recomputeMotherConnectorLines = useCallback(() => {
               if (viewMode !== 'tree' || !treeContainerRef.current) {
                   setConnectorLines([]);
                   return;
               }
-              const containerRect = treeContainerRef.current.getBoundingClientRect();
-              const scrollLeft = treeContainerRef.current.scrollLeft;
-              const scrollTop = treeContainerRef.current.scrollTop;
+              const container = treeContainerRef.current;
+              const containerRect = container.getBoundingClientRect();
+              const scrollLeft = container.scrollLeft;
+              const scrollTop = container.scrollTop;
 
               const lines = [];
 
               lineAnchorRefs.current.forEach((anchorEl, anchorKey) => {
-                  if (!anchorEl) return;
+                  if (!anchorEl || !anchorEl.isConnected) return;
                   const [fatherId, wifeId] = anchorKey.split('__');
                   if (!wifeId || wifeId === 'UNASSIGNED') return;
 
                   const womanEl = womanCardRefs.current.get(wifeId);
-                  if (!womanEl) return;
+                  if (!womanEl || !womanEl.isConnected) return;
 
                   const aRect = anchorEl.getBoundingClientRect();
                   const wRect = womanEl.getBoundingClientRect();
 
-                  const x1 = (wRect.left - containerRect.left) + scrollLeft + wRect.width / 2;
-                  const y1 = (wRect.top - containerRect.top) + scrollTop + wRect.height / 2;
-                  const x2 = (aRect.left - containerRect.left) + scrollLeft + aRect.width / 2;
-                  const y2 = (aRect.top - containerRect.top) + scrollTop + aRect.height / 2;
+                  // حساب منتصف كل عنصر في إحداثيات المحتوى الكاملة داخل الحاوية
+                  const wCenterX = (wRect.left - containerRect.left) + scrollLeft + wRect.width / 2;
+                  const wCenterY = (wRect.top - containerRect.top) + scrollTop + wRect.height / 2;
+                  const aCenterX = (aRect.left - containerRect.left) + scrollLeft + aRect.width / 2;
+                  const aCenterY = (aRect.top - containerRect.top) + scrollTop + aRect.height / 2;
+
+                  // اختيار نقطة الانطلاق من الحافة الأقرب لبطاقة الأم نحو الشارة
+                  const dx = aCenterX - wCenterX;
+                  const dy = aCenterY - wCenterY;
+
+                  let x1 = wCenterX;
+                  let y1 = wCenterY;
+                  if (Math.abs(dx) > Math.abs(dy)) {
+                      x1 = dx >= 0
+                          ? (wRect.right - containerRect.left) + scrollLeft
+                          : (wRect.left - containerRect.left) + scrollLeft;
+                  } else {
+                      y1 = dy >= 0
+                          ? (wRect.bottom - containerRect.top) + scrollTop
+                          : (wRect.top - containerRect.top) + scrollTop;
+                  }
+
+                  let x2 = aCenterX;
+                  let y2 = aCenterY;
+                  if (Math.abs(dx) > Math.abs(dy)) {
+                      x2 = dx >= 0
+                          ? (aRect.left - containerRect.left) + scrollLeft
+                          : (aRect.right - containerRect.left) + scrollLeft;
+                  } else {
+                      y2 = dy >= 0
+                          ? (aRect.top - containerRect.top) + scrollTop
+                          : (aRect.bottom - containerRect.top) + scrollTop;
+                  }
 
                   const father = cardsMap.get(fatherId);
                   const marriage = father ? getFatherMarriages(father).find(m => m.wifeId === wifeId) : null;
@@ -689,16 +719,18 @@
               });
 
               setConnectorLines(lines);
-          }, [viewMode, cards, cardsMap, activeTreeSubTab, treeZoom, searchQuery]);
+          }, [viewMode, cards, cardsMap, getFatherMarriages]);
 
           useEffect(() => {
-              const timer = setTimeout(recomputeMotherConnectorLines, 80);
+              const timer1 = setTimeout(recomputeMotherConnectorLines, 60);
+              const timer2 = setTimeout(recomputeMotherConnectorLines, 260);
               window.addEventListener('resize', recomputeMotherConnectorLines);
               return () => {
-                  clearTimeout(timer);
+                  clearTimeout(timer1);
+                  clearTimeout(timer2);
                   window.removeEventListener('resize', recomputeMotherConnectorLines);
               };
-          }, [recomputeMotherConnectorLines]);
+          }, [recomputeMotherConnectorLines, activeTreeSubTab, treeZoom, searchQuery]);
 
           useEffect(() => {
               if (!draggingLine) return;
@@ -1689,7 +1721,7 @@
                               }}
                               onClick={() => { setSelectedCard(node); setGalleryShowInfo(false); }}
                               title={isFemale ? `بطاقة: ${getDisplayFullName(node)} (أسقط خط الأبناء هنا لربطها كأم)` : `عرض بطاقة: ${getDisplayFullName(node)}`}
-                              className={`cursor-pointer p-2.5 rounded-2xl border-2 transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 flex flex-col items-center min-w-[92px] max-w-[115px] bg-white relative ${
+                              className={`cursor-pointer p-2.5 rounded-2xl border-2 transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 flex flex-col items-center min-w-[96px] max-w-[120px] bg-white relative ${
                                   isDropTarget
                                       ? 'border-pink-600 ring-4 ring-pink-300 scale-110 bg-pink-50 z-20'
                                       : isFemale
@@ -1703,7 +1735,7 @@
                                   </span>
                               )}
                               <PersonAvatar card={{ ...node, gender: isFemale ? 'female' : 'male' }} sizeClass="w-14 h-14" />
-                              <span className="mt-2 font-extrabold text-sm text-gray-800 truncate w-full text-center">
+                              <span className="mt-2 font-extrabold text-sm text-gray-800 whitespace-nowrap truncate max-w-full text-center">
                                   {firstNameDisplay}
                               </span>
                           </div>
@@ -1777,7 +1809,7 @@
                                               onMouseDown={(e) => startDraggingFromAnchor(e, node.id, bundle.wifeId)}
                                               onTouchStart={(e) => startDraggingFromAnchor(e, node.id, bundle.wifeId)}
                                               title="اسحب إلى امرأة لربط أو تغيير الأم لهذا الخط المستقل"
-                                              className={`cursor-grab active:cursor-grabbing px-2.5 py-1 rounded-full border text-[11px] font-bold flex items-center gap-1.5 shadow-sm transition mb-1 ${
+                                              className={`cursor-grab active:cursor-grabbing px-3 py-1.5 rounded-full border text-[11px] font-bold flex items-center gap-1.5 shadow-sm transition mb-1 whitespace-nowrap shrink-0 ${
                                                   isUnassigned
                                                       ? 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-pink-50 hover:border-pink-300'
                                                       : isDivorced
@@ -1785,12 +1817,12 @@
                                                           : 'bg-pink-100 border-pink-400 text-pink-900 hover:bg-pink-200'
                                               }`}
                                           >
-                                              <span className={`w-2 h-2 rounded-full ${isUnassigned ? 'bg-gray-400' : isDivorced ? 'bg-red-300' : 'bg-pink-500'}`}></span>
-                                              <span>
+                                              <span className={`w-2 h-2 rounded-full shrink-0 ${isUnassigned ? 'bg-gray-400' : isDivorced ? 'bg-red-300' : 'bg-pink-500'}`}></span>
+                                              <span className="whitespace-nowrap">
                                                   {isUnassigned ? 'أبناء غير مرتبطين بأم' : `أبناء: ${wifeFirstName}`}
                                               </span>
                                               {isDivorced && (
-                                                  <span className="bg-red-700 text-[9px] px-1.5 py-0.2 rounded-full">منفصلان ✕</span>
+                                                  <span className="bg-red-700 text-[9px] px-1.5 py-0.5 rounded-full whitespace-nowrap">منفصلان ✕</span>
                                               )}
 
                                               <button
@@ -1806,7 +1838,7 @@
                                                       setQuickBranchGender('male');
                                                   }}
                                                   title={isUnassigned ? 'إضافة ابن/بنت' : `إضافة ابن/بنت لـ (${firstNameDisplay}) و(${wifeFirstName})`}
-                                                  className="w-4 h-4 rounded-full bg-white/80 hover:bg-white text-gray-800 flex items-center justify-center"
+                                                  className="w-4 h-4 rounded-full bg-white/90 hover:bg-white text-gray-800 flex items-center justify-center shrink-0"
                                               >
                                                   <Plus size={10} strokeWidth={3} />
                                               </button>
@@ -1820,10 +1852,10 @@
                                                           toggleMarriageDivorceStatus(node.id, bundle.wifeId);
                                                       }}
                                                       title={isDivorced ? 'إلغاء حالة الانفصال' : 'تحديد الزواج كـ (تم الانفصال)'}
-                                                      className={`w-4 h-4 rounded-full flex items-center justify-center transition ${
+                                                      className={`w-4 h-4 rounded-full flex items-center justify-center transition shrink-0 ${
                                                           isDivorced
                                                               ? 'bg-white text-red-900 hover:bg-red-100'
-                                                              : 'bg-white/80 text-red-700 hover:bg-red-600 hover:text-white'
+                                                              : 'bg-white/90 text-red-700 hover:bg-red-600 hover:text-white'
                                                       }`}
                                                   >
                                                       <X size={10} strokeWidth={3} />
@@ -1838,7 +1870,7 @@
                                                   ))}
                                               </ul>
                                           ) : (
-                                              <div className="text-[10px] text-gray-400 bg-gray-50 px-2.5 py-1 rounded-lg border border-dashed border-gray-200 mt-1">
+                                              <div className="text-[10px] text-gray-400 bg-gray-50 px-2.5 py-1 rounded-lg border border-dashed border-gray-200 mt-1 whitespace-nowrap">
                                                   لا يوجد أبناء بعد
                                               </div>
                                           )}
@@ -1972,15 +2004,21 @@
                           onScroll={recomputeMotherConnectorLines}
                           className="relative bg-white rounded-3xl border border-gray-200 shadow-inner p-6 sm:p-10 overflow-x-auto custom-scrollbar min-h-[520px] flex justify-center items-start select-none"
                       >
+                          {/* طبقة خطوط الزواج والأمومة التفاعلية */}
                           <svg
-                              className="absolute inset-0 w-full h-full pointer-events-none z-20"
-                              style={{ minWidth: '100%', minHeight: '100%' }}
+                              className="absolute top-0 right-0 pointer-events-none z-20 overflow-visible"
+                              style={{
+                                  width: treeContainerRef.current ? `${Math.max(treeContainerRef.current.scrollWidth, treeContainerRef.current.clientWidth)}px` : '100%',
+                                  height: treeContainerRef.current ? `${Math.max(treeContainerRef.current.scrollHeight, treeContainerRef.current.clientHeight)}px` : '100%'
+                              }}
                           >
                               {connectorLines.map(line => {
                                   const midX = (line.x1 + line.x2) / 2;
                                   const midY = (line.y1 + line.y2) / 2;
                                   const strokeColor = line.isDivorced ? '#991b1b' : '#ec4899';
-                                  const pathD = `M ${line.x1} ${line.y1} C ${line.x1} ${midY}, ${line.x2} ${midY}, ${line.x2} ${line.y2}`;
+                                  const ctrlX1 = line.x1 + (midX - line.x1) * 0.65;
+                                  const ctrlX2 = line.x2 - (line.x2 - midX) * 0.65;
+                                  const pathD = `M ${line.x1} ${line.y1} C ${ctrlX1} ${line.y1}, ${ctrlX2} ${line.y2}, ${line.x2} ${line.y2}`;
 
                                   return (
                                       <g key={line.key}>
@@ -1990,10 +2028,10 @@
                                               stroke={strokeColor}
                                               strokeWidth={line.isDivorced ? "3" : "2.5"}
                                               strokeDasharray={line.isDivorced ? "6 4" : "none"}
-                                              opacity="0.9"
+                                              opacity="0.95"
                                           />
-                                          <circle cx={line.x1} cy={line.y1} r="4.5" fill={strokeColor} />
-                                          <circle cx={line.x2} cy={line.y2} r="4.5" fill={strokeColor} />
+                                          <circle cx={line.x1} cy={line.y1} r="4.5" fill={strokeColor} stroke="#ffffff" strokeWidth="1.5" />
+                                          <circle cx={line.x2} cy={line.y2} r="4.5" fill={strokeColor} stroke="#ffffff" strokeWidth="1.5" />
 
                                           {line.isDivorced && (
                                               <g transform={`translate(${midX}, ${midY})`}>
