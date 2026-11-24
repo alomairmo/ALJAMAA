@@ -143,7 +143,7 @@
             Plus, Play, Check, X, Image as ImageIcon, Info, BarChart2, 
             ChevronRight, User, Edit, Trash2, Search, Filter, Folder, 
             Tag, ArrowRight, RefreshCw, Loader2, GitFork, Users, Sparkles, ZoomIn, ZoomOut,
-            Heart, HeartOff, Link2, AlertTriangle
+            Heart, HeartOff, Link2, AlertTriangle, UserPlus, UserCheck
         } from 'https://esm.sh/lucide-react@0.344.0';
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
@@ -255,11 +255,11 @@
                                 }}
                             />
                             <div style={{ display: 'none' }} className="w-full h-full">
-                                {isFemale ? <AsiriWomanAvatar/> : <MaleDefaultAvatar/>}
+                                {isFemale ? <AsiriWomanAvatar /> : <MaleDefaultAvatar />}
                             </div>
                         </>
                     ) : (
-                        isFemale ? <AsiriWomanAvatar/> : <MaleDefaultAvatar/>
+                        isFemale ? <AsiriWomanAvatar /> : <MaleDefaultAvatar />
                     )}
                 </div>
             );
@@ -343,9 +343,11 @@
           const [newTreeRootGender, setNewTreeRootGender] = useState('male');
           const [showNewTreeModal, setShowNewTreeModal] = useState(false);
 
-          // نافذة الإضافة السريعة لفرع تحت شخص أو زوجة محددة في المشجرة
+          // نافذة الإضافة تحت شخص في المشجرة: خيار بين (جديد) أو (حالي من البطاقات)
           const [quickBranchParent, setQuickBranchParent] = useState(null);
           const [quickBranchMotherId, setQuickBranchMotherId] = useState(null);
+          const [quickBranchMode, setQuickBranchMode] = useState('choose'); // 'choose' | 'new' | 'existing'
+          const [quickBranchSearch, setQuickBranchSearch] = useState('');
           const [quickBranchName, setQuickBranchName] = useState('');
           const [quickBranchGender, setQuickBranchGender] = useState('male');
           const [isSavingBranch, setIsSavingBranch] = useState(false);
@@ -353,7 +355,6 @@
 
           // --- حالات السحب والربط بين خط الأبناء والأم (الزوجة) ---
           const [draggingLine, setDraggingLine] = useState(null); 
-          // draggingLine: { fatherId, sourceMotherId, startX, startY, currentX, currentY }
           const [hoveredWomanId, setHoveredWomanId] = useState(null);
           const [connectorLines, setConnectorLines] = useState([]);
           const treeContainerRef = useRef(null);
@@ -484,14 +485,11 @@
           };
 
           // --- دوال العلاقات الزوجية والأمومة والأبناء ---
-
-          // جلب جميع الزيجات المسجلة لزوج (أب) معين
           const getFatherMarriages = (fatherCard) => {
               if (!fatherCard) return [];
               const explicitMarriages = Array.isArray(fatherCard.marriages) ? [...fatherCard.marriages] : [];
               const seenWives = new Set(explicitMarriages.map(m => m.wifeId));
 
-              // إضافة أي أم مرتبطة بالأبناء مباشرة عبر motherId ولم تُدرج في marriages بعد
               cards.forEach(child => {
                   if (child.parentId === fatherCard.id && child.motherId && !seenWives.has(child.motherId)) {
                       seenWives.add(child.motherId);
@@ -505,13 +503,11 @@
               return explicitMarriages.filter(m => cardsMap.has(m.wifeId));
           };
 
-          // جلب جميع الزيجات المسجلة لامرأة (زوجة/أم) معينة
           const getWomanMarriages = (womanCard) => {
               if (!womanCard) return [];
               const results = [];
               const seenHusbands = new Set();
 
-              // 1. من سجل marriages في بطاقات الأزواج
               cards.forEach(person => {
                   if (Array.isArray(person.marriages)) {
                       const found = person.marriages.find(m => m.wifeId === womanCard.id);
@@ -526,7 +522,6 @@
                   }
               });
 
-              // 2. من الأبناء الذين يحملون motherId === womanCard.id
               cards.forEach(child => {
                   if (child.motherId === womanCard.id && child.parentId && !seenHusbands.has(child.parentId)) {
                       const husband = cardsMap.get(child.parentId);
@@ -544,7 +539,7 @@
               return results;
           };
 
-          // ربط خط الأبناء (أو خط مستقل جديد لزوجة إضافية) بامرأة كأم وزوجة
+          // ربط خط الأبناء بامرأة كأم وزوجة
           const linkChildrenLineToMother = async (fatherId, sourceMotherId, womanId) => {
               if (!fatherId || !womanId || fatherId === womanId) return;
               const father = cardsMap.get(fatherId);
@@ -557,7 +552,6 @@
               }
 
               try {
-                  // تحديث قائمة زوجات الأب
                   const existingMarriages = Array.isArray(father.marriages) ? [...father.marriages] : [];
                   const marriageIdx = existingMarriages.findIndex(m => m.wifeId === womanId);
                   if (marriageIdx === -1) {
@@ -567,15 +561,12 @@
                   }
                   await updateDoc(doc(db, "flashcards", father.id), { marriages: existingMarriages });
 
-                  // تحديث سجل الأزواج في بطاقة المرأة
                   const womanHusbands = Array.isArray(woman.husbandIds) ? [...woman.husbandIds] : [];
                   if (!womanHusbands.includes(father.id)) {
                       womanHusbands.push(father.id);
                       await updateDoc(doc(db, "flashcards", woman.id), { husbandIds: womanHusbands });
                   }
 
-                  // إذا كان الخط المسحوب هو خط الأبناء غير المرتبطين بأم (sourceMotherId === 'UNASSIGNED')
-                  // نربطهم بهذه الأم، أما إذا كان الأب لديه زوجة سابقة فهذا الخط يمثل حزمة أبناء مستقلة للأم الجديدة
                   const targetChildren = cards.filter(c => {
                       if (c.parentId !== father.id) return false;
                       if (sourceMotherId === 'UNASSIGNED') {
@@ -605,7 +596,6 @@
               }
           };
 
-          // تبديل حالة الزواج بين "قائم" و "تم الانفصال"
           const toggleMarriageDivorceStatus = async (fatherId, wifeId) => {
               const father = cardsMap.get(fatherId);
               if (!father) return;
@@ -619,7 +609,6 @@
                   );
                   await updateDoc(doc(db, "flashcards", father.id), { marriages: updatedMarriages });
 
-                  // تحديث حالة الانفصال لدى أبناء هذه الزوجة من هذا الأب
                   const sharedChildren = cards.filter(c => c.parentId === fatherId && c.motherId === wifeId);
                   for (const child of sharedChildren) {
                       await updateDoc(doc(db, "flashcards", child.id), {
@@ -639,7 +628,6 @@
               }
           };
 
-          // فك ارتباط الزوجة عن خط الأبناء
           const unlinkMotherFromFather = async (fatherId, wifeId) => {
               const father = cardsMap.get(fatherId);
               if (!father) return;
@@ -674,7 +662,6 @@
 
               lineAnchorRefs.current.forEach((anchorEl, anchorKey) => {
                   if (!anchorEl) return;
-                  // anchorKey format: `${fatherId}__${wifeId}`
                   const [fatherId, wifeId] = anchorKey.split('__');
                   if (!wifeId || wifeId === 'UNASSIGNED') return;
 
@@ -731,7 +718,6 @@
 
                   setDraggingLine(prev => prev ? { ...prev, currentX: x, currentY: y } : null);
 
-                  // اكتشاف بطاقة المرأة تحت المؤشر
                   let foundWomanId = null;
                   womanCardRefs.current.forEach((el, wId) => {
                       if (!el) return;
@@ -912,7 +898,6 @@
                   }
               }
 
-              // إذا كان للأب زوجة واحدة فقط نشطة، نربط الابن الجديد بها تلقائياً ما لم يُحدد غير ذلك
               let resolvedMotherId = cardData.motherId !== undefined ? cardData.motherId : (isEdit ? initialData?.motherId || null : null);
               if (!resolvedMotherId && resolvedParentId) {
                   const fatherObj = cardsMap.get(resolvedParentId);
@@ -1019,7 +1004,17 @@
               }
           };
 
-          // إضافة فرع (ابن/بنت) سريع تحت شخص أو تحت زوجة معينة في المشجرة
+          // إغلاق نافذة الإضافة في المشجرة وتصفير الحقول
+          const closeQuickBranchModal = () => {
+              setQuickBranchParent(null);
+              setQuickBranchMotherId(null);
+              setQuickBranchMode('choose');
+              setQuickBranchSearch('');
+              setQuickBranchName('');
+              setQuickBranchGender('male');
+          };
+
+          // إضافة فرع جديد (بطاقة جديدة) تحت شخص في المشجرة
           const handleAddQuickBranch = async (e) => {
               e.preventDefault();
               const rawInput = quickBranchName.trim();
@@ -1039,7 +1034,6 @@
                       ? [...quickBranchParent.tags]
                       : (activeTreeSubTab !== 'ALL' ? [activeTreeSubTab] : []);
 
-                  // تحديد الأم إذا تم اختيارها أو إذا كان للأب زوجة واحدة
                   let targetMotherId = quickBranchMotherId || null;
                   if (!targetMotherId) {
                       const activeWives = getFatherMarriages(quickBranchParent).filter(m => m.status !== 'divorced');
@@ -1063,14 +1057,88 @@
                       userId: user?.uid || 'anonymous'
                   });
 
-                  setQuickBranchName('');
-                  setQuickBranchGender('male');
-                  setQuickBranchParent(null);
-                  setQuickBranchMotherId(null);
+                  closeQuickBranchModal();
                   showNotification(`تمت إضافة "${childFirst}" (${detectedGender === 'female' ? 'أنثى - بنت' : 'ذكر - بن'}) كفرع في المشجرة`, "success");
               } catch (err) {
                   console.error(err);
                   showNotification("حدث خطأ أثناء إضافة الفرع", "error");
+              } finally {
+                  setIsSavingBranch(false);
+              }
+          };
+
+          // نقل بطاقة حالية بجميع بياناتها (الصورة، الوصف، التصنيفات، الإحصائيات، والأبناء التابعين لها)
+          // لتصبح ابناً للشخص المختار، مع حذف جميع الأسماء السابقة التي فوق اسمها الأول وإلحاقها بنسب الأب الجديد
+          const handleAttachExistingCardAsChild = async (existingCard) => {
+              if (!existingCard || !quickBranchParent) return;
+              if (existingCard.id === quickBranchParent.id) {
+                  showNotification("لا يمكن ربط الشخص بنفسه!", "error");
+                  return;
+              }
+
+              setIsSavingBranch(true);
+              try {
+                  // 1. الاحتفاظ بالاسم الأول فقط وحذف جميع الأسماء السابقة التي فوق الاسم الأول
+                  const childFirstName = (existingCard.firstName || parseNameParts(existingCard.name)[0] || '').trim();
+                  const childGender = getEffectiveGender(existingCard);
+
+                  // 2. بناء النسب الجديد بدءاً من الاسم الأول ثم سلسلة آباء الشخص الذي أُضيف إليه
+                  const parentChain = getLineageChain(quickBranchParent, cardsMap);
+                  const newFullChain = [childFirstName, ...parentChain];
+                  const updatedFullName = buildFullName(newFullChain, childGender, true);
+
+                  // 3. تحديد الأم إذا كانت محددة أو إذا كان للأب زوجة واحدة نشطة
+                  let targetMotherId = quickBranchMotherId || null;
+                  if (!targetMotherId && getEffectiveGender(quickBranchParent) === 'male') {
+                      const activeWives = getFatherMarriages(quickBranchParent).filter(m => m.status !== 'divorced');
+                      if (activeWives.length === 1) {
+                          targetMotherId = activeWives[0].wifeId;
+                      }
+                  }
+
+                  // 4. دمج تصنيفات الأب مع تصنيفات البطاقة الحالية (مع الإبقاء على كافة بياناتها الأخرى كما هي)
+                  const mergedTags = Array.from(new Set([
+                      ...(existingCard.tags || []),
+                      ...(quickBranchParent.tags || []),
+                      ...(activeTreeSubTab !== 'ALL' ? [activeTreeSubTab] : [])
+                  ]));
+
+                  await updateDoc(doc(db, "flashcards", existingCard.id), {
+                      firstName: childFirstName,
+                      name: updatedFullName,
+                      parentId: quickBranchParent.id,
+                      motherId: targetMotherId,
+                      parentsDivorced: false,
+                      tags: mergedTags
+                  });
+
+                  // 5. تحديث سلاسل أسماء الأبناء والأحفاد التابعين لهذا الشخص المنقول ليتبعوا النسب الجديد تلقائياً
+                  const updateDescendantsLineage = async (parentNodeId, currentAncestorChain) => {
+                      const directKids = cards.filter(c => c.parentId === parentNodeId);
+                      for (const kid of directKids) {
+                          const kidFirst = (kid.firstName || parseNameParts(kid.name)[0] || '').trim();
+                          const kidGender = getEffectiveGender(kid);
+                          const kidChain = [kidFirst, ...currentAncestorChain];
+                          const kidUpdatedName = buildFullName(kidChain, kidGender, true);
+                          await updateDoc(doc(db, "flashcards", kid.id), {
+                              firstName: kidFirst,
+                              name: kidUpdatedName
+                          });
+                          await updateDescendantsLineage(kid.id, kidChain);
+                      }
+                  };
+
+                  await updateDescendantsLineage(existingCard.id, newFullChain);
+
+                  const parentFirst = quickBranchParent.firstName || parseNameParts(quickBranchParent.name)[0];
+                  closeQuickBranchModal();
+                  showNotification(
+                      `تم نقل "${childFirstName}" بجميع بياناته وحذف الأسماء السابقة فوق اسمه الأول ليصبح ابناً لـ "${parentFirst}"`,
+                      "success"
+                  );
+              } catch (err) {
+                  console.error("Error attaching existing card:", err);
+                  showNotification("حدث خطأ أثناء نقل البطاقة الحالية", "error");
               } finally {
                   setIsSavingBranch(false);
               }
@@ -1320,12 +1388,12 @@
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
                     <span className="bg-blue-100 text-blue-600 p-2 rounded-xl">
-                      {isEdit ? <Edit size="{24}"/> : <Plus size="{24}"/>}
+                      {isEdit ? <Edit size={24} /> : <Plus size={24} />}
                     </span>
                     {isEdit ? 'تعديل البطاقة' : 'إضافة بطاقة جديدة'}
                   </h2>
                   <button onClick={() => { setView('gallery'); setEditingCard(null); }} className="text-gray-500 hover:text-gray-800 flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-xl transition">
-                    عودة <ChevronRight size="{18}"/>
+                    عودة <ChevronRight size={18} />
                   </button>
                 </div>
 
@@ -1344,7 +1412,7 @@
                         }`}
                       >
                         <div className="w-12 h-12 rounded-xl bg-sky-100 border-2 border-sky-300 overflow-hidden shrink-0">
-                          <MaleDefaultAvatar/>
+                          <MaleDefaultAvatar />
                         </div>
                         <div className="text-right">
                           <div className="font-bold text-base">ذكر (بن)</div>
@@ -1362,7 +1430,7 @@
                         }`}
                       >
                         <div className="w-12 h-12 rounded-full bg-pink-100 border-2 border-pink-300 overflow-hidden shrink-0">
-                          <AsiriWomanAvatar/>
+                          <AsiriWomanAvatar />
                         </div>
                         <div className="text-right">
                           <div className="font-bold text-base">أنثى (بنت)</div>
@@ -1376,7 +1444,7 @@
                   <div className="bg-gray-50/80 p-4 rounded-2xl border border-gray-200">
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-gray-800 font-bold flex items-center gap-2">
-                        <GitFork className="text-blue-600" size="{18}"/>
+                        <GitFork size={18} className="text-blue-600" />
                         تسلسل الاسم (الاسم الأول - الثاني - الثالث...)
                       </label>
                       <button
@@ -1384,7 +1452,7 @@
                         onClick={handleAddNameSlot}
                         className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition"
                       >
-                        <Plus size="{14}"/> إضافة اسم أب/جد
+                        <Plus size={14} /> إضافة اسم أب/جد
                       </button>
                     </div>
                     <p className="text-xs text-gray-500 mb-3">
@@ -1393,16 +1461,16 @@
 
                     {autoSplitNotice && (
                       <div className="mb-3 bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-bold px-3 py-2 rounded-xl flex items-center justify-between">
-                        <span className="flex items-center gap-1.5"><Sparkles className="text-indigo-600" size="{14}"/> {autoSplitNotice}</span>
+                        <span className="flex items-center gap-1.5"><Sparkles size={14} className="text-indigo-600" /> {autoSplitNotice}</span>
                         <button type="button" onClick={() => setAutoSplitNotice('')} className="text-indigo-400 hover:text-indigo-700">
-                          <X size="{14}"/>
+                          <X size={14} />
                         </button>
                       </div>
                     )}
 
                     <div className="flex flex-wrap items-center gap-2 relative">
                       {nameParts.map((part, idx) => (
-                        <React.Fragment key="{idx}">
+                        <React.Fragment key={idx}>
                           {idx > 0 && (
                             <span className={`text-xs font-black px-2 py-0.5 rounded-md ${
                               idx === 1 && gender === 'female'
@@ -1437,14 +1505,14 @@
                                 className="absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-red-500 p-0.5"
                                 title="حذف هذه الخانة"
                               >
-                                <X size="{14}"/>
+                                <X size={14} />
                               </button>
                             )}
 
                             {focusedPartIndex === idx && autocompleteSuggestions.length > 0 && (
                               <div className="absolute z-30 right-0 mt-1 w-64 bg-white rounded-2xl shadow-xl border border-blue-100 overflow-hidden animate-in fade-in">
                                 <div className="bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-700 flex items-center gap-1">
-                                  <Sparkles size="{12}"/> تسلسلات موجودة في المشجرة:
+                                  <Sparkles size={12} /> تسلسلات موجودة في المشجرة:
                                 </div>
                                 {autocompleteSuggestions.map(({ card, chain }) => (
                                   <button
@@ -1461,7 +1529,7 @@
                                         </span>
                                       )}
                                     </div>
-                                    <ChevronRight className="text-gray-400 rotate-180" size="{14}"/>
+                                    <ChevronRight size={14} className="text-gray-400 rotate-180" />
                                   </button>
                                 ))}
                               </div>
@@ -1479,11 +1547,11 @@
                         {nameParts.slice(1).some(p => p.trim()) && (
                           matchedAncestorCard ? (
                             <span className="bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full font-bold inline-flex items-center gap-1 w-fit">
-                              <Check size="{12}"/> سيرتبط تلقائياً كفرع لـ ({matchedAncestorCard.firstName || parseNameParts(matchedAncestorCard.name)[0]})
+                              <Check size={12} /> سيرتبط تلقائياً كفرع لـ ({matchedAncestorCard.firstName || parseNameParts(matchedAncestorCard.name)[0]})
                             </span>
                           ) : (
                             <span className="bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full font-bold inline-flex items-center gap-1 w-fit">
-                              <GitFork size="{12}"/> سينشئ تسلسل جديد تحت {CLAN_ROOT_TITLE}
+                              <GitFork size={12} /> سينشئ تسلسل جديد تحت {CLAN_ROOT_TITLE}
                             </span>
                           )
                         )}
@@ -1495,7 +1563,7 @@
                   {femaleCards.length > 0 && (
                     <div className="bg-pink-50/60 p-4 rounded-2xl border border-pink-200">
                       <label className="block text-pink-900 font-bold mb-1.5 flex items-center gap-2 text-sm">
-                        <Heart className="text-pink-600" size="{16}"/> الأم (اختياري - أو اسحب خط الأبناء في المشجرة إلى الأم مباشرة)
+                        <Heart size={16} className="text-pink-600" /> الأم (اختياري - أو اسحب خط الأبناء في المشجرة إلى الأم مباشرة)
                       </label>
                       <select
                         value={motherId}
@@ -1519,7 +1587,7 @@
                         {tags.map(tag => (
                           <span key={tag} className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full flex items-center gap-1.5 text-sm font-medium">
                             {tag} 
-                            <X className="cursor-pointer hover:text-red-500 transition" onClick="{()" size="{14}"> handleRemoveTag(tag)} />
+                            <X size={14} className="cursor-pointer hover:text-red-500 transition" onClick={() => handleRemoveTag(tag)} />
                           </span>
                         ))}
                       </div>
@@ -1552,7 +1620,7 @@
                       <div className="flex items-center justify-center w-full">
                         <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition">
                           <div className="flex flex-col items-center justify-center pt-4 pb-5">
-                            <ImageIcon className="w-7 h-7 mb-2 text-gray-400"/>
+                            <ImageIcon className="w-7 h-7 mb-2 text-gray-400" />
                             <p className="text-sm text-gray-500 font-medium">اضغط لرفع صورة من جهازك أو الصقها (Ctrl+V)</p>
                           </div>
                           <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
@@ -1560,7 +1628,11 @@
                       </div>
                     </div>
                     <div className="mt-4 flex justify-center">
-                      <PersonAvatar card="{{" gender, image, imgClassName="object-contain" name: previewFullName sizeClass="w-28 h-28" }}/>
+                      <PersonAvatar
+                        card={{ image, gender, name: previewFullName }}
+                        sizeClass="w-28 h-28"
+                        imgClassName="object-contain"
+                      />
                     </div>
                   </div>
 
@@ -1579,7 +1651,7 @@
                     disabled={isUploading}
                     className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl hover:bg-blue-700 transition shadow-lg shadow-blue-200 text-lg flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                   >
-                    {isUploading ? <Loader2 className="animate-spin" size="{24}"/> : null}
+                    {isUploading ? <Loader2 className="animate-spin" size={24} /> : null}
                     {isUploading ? 'جاري معالجة البيانات والحفظ...' : (isEdit ? 'حفظ التعديلات' : 'حفظ وإضافة')}
                   </button>
                 </form>
@@ -1594,11 +1666,9 @@
               const isFemale = getEffectiveGender(node) === 'female';
               const isDropTarget = isFemale && hoveredWomanId === node.id;
 
-              // إذا كان الأب (ذكر) ولديه زوجات مسجلات أو أبناء مقسمون حسب الأم
               const marriages = !isFemale ? getFatherMarriages(node) : [];
               const hasMultipleWivesOrMothers = !isFemale && marriages.length > 0;
 
-              // تجميع الأبناء حسب الأم (motherId)
               const wifeBundles = useMemo(() => {
                   if (isFemale) return [];
                   const bundles = [];
@@ -1655,13 +1725,13 @@
                                       أفلت للربط كأم
                                   </span>
                               )}
-                              <PersonAvatar 'female' 'male' ...node, : ? card="{{" gender: isFemale sizeClass="w-14 h-14" }}/>
+                              <PersonAvatar card={{ ...node, gender: isFemale ? 'female' : 'male' }} sizeClass="w-14 h-14" />
                               <span className="mt-2 font-extrabold text-sm text-gray-800 truncate w-full text-center">
                                   {firstNameDisplay}
                               </span>
                           </div>
 
-                          {/* أزرار التحكم أسفل الشخص: إضافة ابن/بنت + مقبض السحب لربط خط الأبناء بأم */}
+                          {/* أزرار التحكم أسفل الشخص: زر الإضافة (جديد أو حالي) + مقبض السحب لربط خط الأبناء بأم */}
                           <div className="mt-1.5 flex items-center gap-1.5 z-10">
                               <button
                                   type="button"
@@ -1669,15 +1739,17 @@
                                       e.stopPropagation();
                                       setQuickBranchParent(node);
                                       setQuickBranchMotherId(null);
+                                      setQuickBranchMode('choose');
+                                      setQuickBranchSearch('');
                                       setQuickBranchName('');
                                       setQuickBranchGender('male');
                                   }}
-                                  title={`إضافة فرع (ابن/بنت) لـ ${firstNameDisplay}`}
+                                  title={`إضافة ابن/بنت لـ ${firstNameDisplay} (جديد أو اختيار من البطاقات الحالية)`}
                                   className={`w-6 h-6 rounded-full flex items-center justify-center text-white shadow-sm transition-transform hover:scale-110 active:scale-95 ${
                                       isFemale ? 'bg-pink-500 hover:bg-pink-600' : 'bg-sky-500 hover:bg-sky-600'
                                   }`}
                               >
-                                  <Plus size="{14}" strokeWidth="{3}"/>
+                                  <Plus size={14} strokeWidth={3} />
                               </button>
 
                               {/* مقبض السحب من خط الأب لربط أبنائه أو إضافة زوجة جديدة بخط مستقل */}
@@ -1695,7 +1767,7 @@
                                       title="اسحب هذا المقبض إلى بطاقة امرأة لربطها كزوجة وأم لأبنائه (أو لإضافة زوجة إضافية بخط مستقل)"
                                       className="w-6 h-6 rounded-full bg-pink-100 hover:bg-pink-500 text-pink-600 hover:text-white border border-pink-300 flex items-center justify-center shadow-sm cursor-grab active:cursor-grabbing transition"
                                   >
-                                      <Heart size="{12}"/>
+                                      <Heart size={12} />
                                   </button>
                               )}
                           </div>
@@ -1723,7 +1795,6 @@
                                                       : 'wife-group-node'
                                           }
                                       >
-                                          {/* نقطة اتصال خط هذه الحزمة من الأبناء بالأم + خيارات الانفصال وإضافة ابن لهذه الأم */}
                                           <div
                                               ref={(el) => {
                                                   if (el) lineAnchorRefs.current.set(anchorKey, el);
@@ -1748,7 +1819,7 @@
                                                   <span className="bg-red-700 text-[9px] px-1.5 py-0.2 rounded-full">منفصلان ✕</span>
                                               )}
 
-                                              {/* زر إضافة ابن/بنت مباشرة ضمن خط هذه الأم */}
+                                              {/* زر إضافة ابن/بنت مباشرة ضمن خط هذه الأم (جديد أو حالي) */}
                                               <button
                                                   type="button"
                                                   onMouseDown={(e) => e.stopPropagation()}
@@ -1756,13 +1827,15 @@
                                                       e.stopPropagation();
                                                       setQuickBranchParent(node);
                                                       setQuickBranchMotherId(isUnassigned ? null : bundle.wifeId);
+                                                      setQuickBranchMode('choose');
+                                                      setQuickBranchSearch('');
                                                       setQuickBranchName('');
                                                       setQuickBranchGender('male');
                                                   }}
                                                   title={isUnassigned ? 'إضافة ابن/بنت' : `إضافة ابن/بنت لـ (${firstNameDisplay}) و(${wifeFirstName})`}
                                                   className="w-4 h-4 rounded-full bg-white/80 hover:bg-white text-gray-800 flex items-center justify-center"
                                               >
-                                                  <Plus size="{10}" strokeWidth="{3}"/>
+                                                  <Plus size={10} strokeWidth={3} />
                                               </button>
 
                                               {/* زر تحديد/إلغاء الانفصال للزوجة */}
@@ -1781,7 +1854,7 @@
                                                               : 'bg-white/80 text-red-700 hover:bg-red-600 hover:text-white'
                                                       }`}
                                                   >
-                                                      <X size="{10}" strokeWidth="{3}"/>
+                                                      <X size={10} strokeWidth={3} />
                                                   </button>
                                               )}
                                           </div>
@@ -1789,7 +1862,7 @@
                                           {bundle.children.length > 0 ? (
                                               <ul>
                                                   {bundle.children.map(child => (
-                                                      <TreeNodeItem childrenMap="{childrenMap}" key="{child.id}" node="{child}"/>
+                                                      <TreeNodeItem key={child.id} node={child} childrenMap={childrenMap} />
                                                   ))}
                                               </ul>
                                           ) : (
@@ -1802,11 +1875,10 @@
                               })}
                           </ul>
                       ) : (
-                          /* الحالة 2: عرض الأبناء الاعتيادي عندما لا توجد زوجة مرتبطة بعد */
                           allChildren.length > 0 && (
                               <ul>
                                   {allChildren.map(child => (
-                                      <TreeNodeItem childrenMap="{childrenMap}" key="{child.id}" node="{child}"/>
+                                      <TreeNodeItem key={child.id} node={child} childrenMap={childrenMap} />
                                   ))}
                               </ul>
                           )
@@ -1839,7 +1911,7 @@
                       <div className="flex flex-wrap items-center justify-between gap-4 mb-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
                           <div className="flex items-center gap-3">
                               <div className="bg-indigo-100 text-indigo-700 p-2.5 rounded-xl">
-                                  <GitFork size="{22}"/>
+                                  <GitFork size={22} />
                               </div>
                               <div>
                                   <h2 className="text-lg sm:text-xl font-black text-gray-800">
@@ -1860,7 +1932,7 @@
                                       className="p-2 hover:bg-white rounded-lg text-gray-600 transition"
                                       title="تصغير"
                                   >
-                                      <ZoomOut size="{16}"/>
+                                      <ZoomOut size={16} />
                                   </button>
                                   <span className="px-2 text-xs font-bold text-gray-600">{Math.round(treeZoom * 100)}%</span>
                                   <button
@@ -1868,7 +1940,7 @@
                                       className="p-2 hover:bg-white rounded-lg text-gray-600 transition"
                                       title="تكبير"
                                   >
-                                      <ZoomIn size="{16}"/>
+                                      <ZoomIn size={16} />
                                   </button>
                               </div>
 
@@ -1876,19 +1948,19 @@
                                   onClick={() => startQuiz(treeMembers)}
                                   className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl hover:bg-emerald-700 transition font-bold text-sm"
                               >
-                                  <Play fill="currentColor" size="{16}"/> اختبار المعروض
+                                  <Play size={16} fill="currentColor" /> اختبار المعروض
                               </button>
 
                               <button
                                   onClick={() => setShowNewTreeModal(true)}
                                   className="flex items-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-4 py-2 rounded-xl transition font-bold text-sm"
                               >
-                                  <Plus size="{16}"/> إضافة فرع/مجلد جديد
+                                  <Plus size={16} /> إضافة فرع/مجلد جديد
                               </button>
                           </div>
                       </div>
 
-                      {/* شريط التبويبات الفرعية للانتقال السريع بين المشجرة الرئيسية والمجلدات */}
+                      {/* شريط التبويبات الفرعية */}
                       <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-4 custom-scrollbar">
                           <button
                               onClick={() => setActiveTreeSubTab('ALL')}
@@ -1898,7 +1970,7 @@
                                       : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                               }`}
                           >
-                              <Users size="{16}"/> الكل (المشجرة الرئيسية)
+                              <Users size={16} /> الكل (المشجرة الرئيسية)
                               <span className={`text-xs px-2 py-0.5 rounded-full ${activeTreeSubTab === 'ALL' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'}`}>
                                   {filteredCards.length}
                               </span>
@@ -1917,7 +1989,7 @@
                                               : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                                       }`}
                                   >
-                                      <Folder size="{15}"/> {tag}
+                                      <Folder size={15} /> {tag}
                                       <span className={`text-xs px-2 py-0.5 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'}`}>
                                           {count}
                                       </span>
@@ -1926,7 +1998,7 @@
                           })}
                       </div>
 
-                      {/* لوحة رسم الشجرة الهرمية مع طبقة SVG لخطوط الربط الوردية والحمراء الغامقة للأمهات */}
+                      {/* لوحة رسم الشجرة الهرمية */}
                       <div
                           ref={treeContainerRef}
                           onScroll={recomputeMotherConnectorLines}
@@ -1956,7 +2028,6 @@
                                           <circle cx={line.x1} cy={line.y1} r="4.5" fill={strokeColor} />
                                           <circle cx={line.x2} cy={line.y2} r="4.5" fill={strokeColor} />
 
-                                          {/* علامة X في منتصف الخط عند تحديد الزواج كـ (تم الانفصال) */}
                                           {line.isDivorced && (
                                               <g transform={`translate(${midX}, ${midY})`}>
                                                   <circle r="11" fill="#7f1d1d" stroke="#ffffff" strokeWidth="2" />
@@ -1968,7 +2039,6 @@
                                   );
                               })}
 
-                              {/* خط السحب المؤقت أثناء سحب المستخدم للخط نحو بطاقة الأم */}
                               {draggingLine && (
                                   <g>
                                       <path
@@ -2012,14 +2082,14 @@
                                                   title="إضافة فرع مباشر تحت آل السعيدي - آل سعد - بلّسمر"
                                                   className="mt-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm flex items-center gap-1 transition"
                                               >
-                                                  <Plus size="{13}" strokeWidth="{3}"/> إضافة جد / فرع
+                                                  <Plus size={13} strokeWidth={3} /> إضافة جد / فرع
                                               </button>
                                           </div>
 
                                           {roots.length > 0 ? (
                                               <ul>
                                                   {roots.map(rootNode => (
-                                                      <TreeNodeItem childrenMap="{childrenMap}" key="{rootNode.id}" node="{rootNode}"/>
+                                                      <TreeNodeItem key={rootNode.id} node={rootNode} childrenMap={childrenMap} />
                                                   ))}
                                               </ul>
                                           ) : (
@@ -2035,12 +2105,16 @@
 
                       <div className="mt-4 flex flex-wrap items-center justify-center gap-5 text-xs text-gray-600 bg-white py-3 px-4 rounded-2xl border border-gray-100">
                           <span className="flex items-center gap-1.5">
-                              <span className="w-5 h-5 rounded-full bg-pink-100 border border-pink-300 text-pink-600 inline-flex items-center justify-center"><Heart size="{11}"/></span>
+                              <span className="w-5 h-5 rounded-full bg-sky-500 text-white inline-flex items-center justify-center"><Plus size={11} /></span>
+                              اضغط (+) أسفل أي شخص لإضافة ابن جديد أو نقل بطاقة حالية إليه
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                              <span className="w-5 h-5 rounded-full bg-pink-100 border border-pink-300 text-pink-600 inline-flex items-center justify-center"><Heart size={11} /></span>
                               اسحب أيقونة القلب من الأب إلى بطاقة امرأة لربطها كزوجة وأم بخط وردي مستقل لأبنائها
                           </span>
                           <span className="flex items-center gap-1.5">
-                              <span className="w-5 h-5 rounded-full bg-red-900 text-white inline-flex items-center justify-center"><X size="{11}"/></span>
-                              الخط الأحمر الغامق بعلامة X يدل على الانفصال مع إمكانية ارتباط الأم بزوج وأبناء آخرين
+                              <span className="w-5 h-5 rounded-full bg-red-900 text-white inline-flex items-center justify-center"><X size={11} /></span>
+                              الخط الأحمر الغامق بعلامة X يدل على الانفصال
                           </span>
                       </div>
                   </div>
@@ -2053,7 +2127,7 @@
               return (
                 <div className="flex flex-col items-center justify-center py-20 px-4 animate-in fade-in">
                   <div className="bg-red-50 text-red-700 p-8 rounded-3xl max-w-2xl text-center border border-red-200 shadow-sm">
-                    <X className="mx-auto mb-4 text-red-500" size="{56}" strokeWidth="{2.5}"/>
+                    <X size={56} className="mx-auto mb-4 text-red-500" strokeWidth={2.5} />
                     <h2 className="text-2xl font-bold mb-4">يوجد خطأ في إعدادات Firebase</h2>
                     {authError && <p className="text-sm">{authError}</p>}
                     {dbError && <p className="text-sm">{dbError}</p>}
@@ -2065,7 +2139,7 @@
             if (loadingData) {
               return (
                 <div className="flex flex-col items-center justify-center py-32 animate-in fade-in">
-                  <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4"/>
+                  <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
                   <h2 className="text-xl text-gray-600 font-bold">جاري تحميل البطاقات...</h2>
                 </div>
               );
@@ -2074,12 +2148,36 @@
             // تجهيز البيانات الأسرية للبطاقة المختارة
             const selectedCardIsFemale = selectedCard ? getEffectiveGender(selectedCard) === 'female' : false;
             const selectedCardMother = selectedCard?.motherId ? cardsMap.get(selectedCard.motherId) : null;
-            const selectedCardFather = selectedCard?.parentId ? cardsMap.get(selectedCard.parentId) : null;
             const selectedCardMarriages = selectedCard
                 ? (selectedCardIsFemale ? getWomanMarriages(selectedCard) : getFatherMarriages(selectedCard))
                 : [];
             const hasMultipleHusbands = selectedCardIsFemale && selectedCardMarriages.length > 1;
             const hasDivorcedHistory = selectedCardIsFemale && selectedCardMarriages.some(m => m.status === 'divorced');
+
+            // استبعاد الشخص نفسه وأسلافه المباشرين عند اختيار بطاقة حالية لنقلها كابن لمنع الدورات المغلقة في الشجرة
+            const getAncestorIds = (personId) => {
+                const ancestors = new Set();
+                let curr = cardsMap.get(personId);
+                while (curr && !ancestors.has(curr.id)) {
+                    ancestors.add(curr.id);
+                    curr = curr.parentId ? cardsMap.get(curr.parentId) : null;
+                }
+                return ancestors;
+            };
+
+            const existingCandidateCards = useMemo(() => {
+                if (!quickBranchParent) return [];
+                const forbiddenIds = getAncestorIds(quickBranchParent.id);
+                const q = quickBranchSearch.trim().toLowerCase();
+                return cards.filter(c => {
+                    if (forbiddenIds.has(c.id)) return false;
+                    if (!q) return true;
+                    const displayFull = getDisplayFullName(c).toLowerCase();
+                    const first = (c.firstName || '').toLowerCase();
+                    const desc = (c.description || '').toLowerCase();
+                    return displayFull.includes(q) || first.includes(q) || desc.includes(q);
+                });
+            }, [quickBranchParent, quickBranchSearch, cards, cardsMap]);
 
             return (
               <div className="animate-in fade-in duration-300">
@@ -2089,7 +2187,7 @@
                       onClick={() => setView('add')}
                       className="flex items-center gap-2 bg-blue-50 text-blue-600 px-4 py-2 rounded-xl hover:bg-blue-100 transition font-medium w-full sm:w-auto justify-center"
                     >
-                      <Plus size="{20}"/> إضافة بطاقة
+                      <Plus size={20} /> إضافة بطاقة
                     </button>
                     {viewMode !== 'tree' && (
                       <label className="flex items-center cursor-pointer gap-3 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100">
@@ -2109,14 +2207,14 @@
                         onClick={() => startQuiz(folders[activeFolder])}
                         className="flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-3 rounded-xl hover:shadow-lg hover:from-emerald-600 hover:to-teal-700 transition font-bold text-lg w-full sm:w-auto whitespace-nowrap"
                       >
-                        <Play fill="currentColor" size="{24}"/> الاختبار في ({activeFolder})
+                        <Play size={24} fill="currentColor" /> الاختبار في ({activeFolder})
                       </button>
                     )}
                     <button 
                       onClick={() => startQuiz()}
                       className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-3 rounded-xl hover:shadow-lg hover:from-blue-700 hover:to-indigo-700 transition font-bold text-lg w-full sm:w-auto whitespace-nowrap"
                     >
-                      <Play fill="currentColor" size="{24}"/> بدء الاختبار
+                      <Play size={24} fill="currentColor" /> بدء الاختبار
                     </button>
                   </div>
                 </div>
@@ -2124,7 +2222,7 @@
                 <div className="flex flex-col md:flex-row gap-4 items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6">
                   <div className="relative w-full md:w-auto flex-1">
                      <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 focus-within:ring-2 focus-within:ring-blue-500 transition">
-                        <Search className="text-gray-400 ml-2" size="{20}"/>
+                        <Search size={20} className="text-gray-400 ml-2" />
                         <input 
                           type="text"
                           placeholder="ابحث في البطاقات..."
@@ -2139,19 +2237,19 @@
                       onClick={() => { setViewMode('all'); setActiveFolder(null); }}
                       className={`flex-1 md:flex-none px-5 py-2 rounded-lg text-sm font-bold transition flex justify-center items-center gap-2 ${viewMode === 'all' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
                     >
-                      <ImageIcon size="{18}"/> كل الصور
+                      <ImageIcon size={18} /> كل الصور
                     </button>
                     <button
                       onClick={() => { setViewMode('folders'); }}
                       className={`flex-1 md:flex-none px-5 py-2 rounded-lg text-sm font-bold transition flex justify-center items-center gap-2 ${viewMode === 'folders' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
                     >
-                      <Folder size="{18}"/> مجلدات
+                      <Folder size={18} /> مجلدات
                     </button>
                     <button
                       onClick={() => { setViewMode('tree'); setActiveFolder(null); setActiveTreeSubTab('ALL'); }}
                       className={`flex-1 md:flex-none px-5 py-2 rounded-lg text-sm font-bold transition flex justify-center items-center gap-2 ${viewMode === 'tree' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-900'}`}
                     >
-                      <GitFork size="{18}"/> مشجرة
+                      <GitFork size={18} /> مشجرة
                     </button>
                   </div>
                 </div>
@@ -2161,7 +2259,7 @@
                   renderTreeView()
                 ) : cards.length === 0 ? (
                   <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-300">
-                    <ImageIcon className="mx-auto text-gray-300 mb-4" size="{64}"/>
+                    <ImageIcon className="mx-auto text-gray-300 mb-4" size={64} />
                     <h2 className="text-xl text-gray-500 font-medium">لا توجد بطاقات حتى الآن</h2>
                   </div>
                 ) : (
@@ -2177,7 +2275,11 @@
                               className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden border border-gray-100 transform hover:-translate-y-1 flex flex-col"
                             >
                               <div className={`aspect-square w-full overflow-hidden relative p-3 flex items-center justify-center ${isFemale ? 'bg-pink-50/40' : 'bg-sky-50/40'}`}>
-                                <PersonAvatar 'female' 'male' ...card, : ? card="{{" gender: imgClassName="object-contain transition duration-500 group-hover:scale-105" isFemale sizeClass="w-full h-full" }}/>
+                                <PersonAvatar
+                                  card={{ ...card, gender: isFemale ? 'female' : 'male' }}
+                                  sizeClass="w-full h-full"
+                                  imgClassName="object-contain transition duration-500 group-hover:scale-105"
+                                />
                               </div>
                               
                               <div className={`p-4 transition-all duration-300 flex flex-col justify-center flex-grow ${showNames ? 'opacity-100 h-auto' : 'opacity-0 h-0 p-0 overflow-hidden'}`}>
@@ -2205,7 +2307,7 @@
                             className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-300 cursor-pointer transition text-center flex flex-col items-center gap-4 group"
                           >
                             <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:bg-blue-100 transition duration-300">
-                              <Folder className="opacity-80" fill="currentColor" size="{40}"/>
+                              <Folder size={40} fill="currentColor" className="opacity-80" />
                             </div>
                             <div className="w-full">
                               <h3 className="font-bold text-gray-800 truncate" title={folderName}>{folderName}</h3>
@@ -2223,10 +2325,10 @@
                             onClick={() => setActiveFolder(null)}
                             className="flex items-center gap-2 text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 px-4 py-2 rounded-xl transition font-medium"
                           >
-                            <ArrowRight size="{18}"/> عودة
+                            <ArrowRight size={18} /> عودة
                           </button>
                           <h2 className="text-xl font-bold flex items-center gap-2 text-gray-800">
-                            <Folder className="text-blue-500" fill="currentColor"/> {activeFolder}
+                            <Folder className="text-blue-500" fill="currentColor" /> {activeFolder}
                           </h2>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
@@ -2239,7 +2341,11 @@
                                 className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden border border-gray-100 transform hover:-translate-y-1 flex flex-col"
                               >
                                 <div className={`aspect-square w-full overflow-hidden relative p-3 flex items-center justify-center ${isFemale ? 'bg-pink-50/40' : 'bg-sky-50/40'}`}>
-                                  <PersonAvatar 'female' 'male' ...card, : ? card="{{" gender: imgClassName="object-contain transition duration-500 group-hover:scale-105" isFemale sizeClass="w-full h-full" }}/>
+                                  <PersonAvatar
+                                    card={{ ...card, gender: isFemale ? 'female' : 'male' }}
+                                    sizeClass="w-full h-full"
+                                    imgClassName="object-contain transition duration-500 group-hover:scale-105"
+                                  />
                                 </div>
                                 <div className={`p-4 transition-all duration-300 flex flex-col justify-center flex-grow ${showNames ? 'opacity-100 h-auto' : 'opacity-0 h-0 p-0 overflow-hidden'}`}>
                                   <h3 className="font-bold text-gray-800 text-center truncate">{getDisplayFullName(card)}</h3>
@@ -2253,7 +2359,7 @@
                   </>
                 )}
 
-                {/* نافذة تفاصيل البطاقة المكبرة (مع عرض بيانات الأم والزوجات والأزواج والأولاد وحالة الانفصال) */}
+                {/* نافذة تفاصيل البطاقة المكبرة */}
                 {selectedCard && (
                   <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 lg:p-10 animate-in fade-in">
                     <div className="bg-white rounded-[2rem] w-full max-w-2xl p-6 shadow-2xl relative flex flex-col max-h-[90vh] overflow-y-auto">
@@ -2263,24 +2369,23 @@
                             onClick={() => handleEditCard(selectedCard)}
                             className="bg-blue-50 text-blue-600 hover:bg-blue-100 p-3 rounded-xl transition shadow-sm flex items-center gap-2 font-bold"
                           >
-                            <Edit size="{20}"/> <span className="hidden sm:inline">تعديل</span>
+                            <Edit size={20} /> <span className="hidden sm:inline">تعديل</span>
                           </button>
                           <button 
                             onClick={() => setDeleteConfirmCard(selectedCard)}
                             className="bg-red-50 text-red-600 hover:bg-red-100 p-3 rounded-xl transition shadow-sm flex items-center gap-2 font-bold"
                           >
-                            <Trash2 size="{20}"/> <span className="hidden sm:inline">حذف</span>
+                            <Trash2 size={20} /> <span className="hidden sm:inline">حذف</span>
                           </button>
                         </div>
                         <button 
                           onClick={() => setSelectedCard(null)}
                           className="bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 p-3 rounded-xl transition shadow-sm"
                         >
-                          <X size="{20}"/>
+                          <X size={20} />
                         </button>
                       </div>
 
-                      {/* الاسم الكامل يظهر بوضوح في أعلى البطاقة المكبرة */}
                       <div className="text-center mb-4">
                         <h3 className="text-xl sm:text-2xl font-black text-gray-800 leading-relaxed">
                           {getDisplayFullName(selectedCard)}
@@ -2296,14 +2401,13 @@
                         )}
                       </div>
 
-                      {/* قسم العلاقات الأسرية (الأم / الزوجات / الأزواج والأولاد وحالة الانفصال) */}
+                      {/* قسم العلاقات الأسرية */}
                       {(selectedCardMother || selectedCardMarriages.length > 0) && (
                         <div className="mb-4 bg-gradient-to-l from-pink-50/80 via-white to-sky-50/70 border border-pink-200 rounded-2xl p-4 space-y-3 text-right">
-                          {/* إذا كان للشخص أم مسجلة */}
                           {selectedCardMother && (
                             <div className="flex items-center justify-between bg-white px-3.5 py-2.5 rounded-xl border border-pink-200 shadow-xs">
                               <div className="flex items-center gap-2.5">
-                                <span className="bg-pink-100 text-pink-700 p-1.5 rounded-lg"><Heart size="{16}"/></span>
+                                <span className="bg-pink-100 text-pink-700 p-1.5 rounded-lg"><Heart size={16} /></span>
                                 <div>
                                   <div className="text-[11px] text-pink-600 font-bold">الأم (زوجة الأب):</div>
                                   <div className="text-sm font-black text-gray-800">{getDisplayFullName(selectedCardMother)}</div>
@@ -2319,10 +2423,9 @@
                             </div>
                           )}
 
-                          {/* تنبيه في ملف المرأة إذا ارتبطت بأكثر من زوج أو كان هناك زواج سابق منفصل */}
                           {selectedCardIsFemale && (hasMultipleHusbands || hasDivorcedHistory) && (
                             <div className="bg-amber-50 border border-amber-300 text-amber-900 px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-start gap-2">
-                              <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size="{16}"/>
+                              <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
                               <div>
                                 {hasMultipleHusbands
                                   ? 'تنبيه في الملف: هذه الأم مرتبطة بأكثر من زوج ولديها أبناء من أكثر من زواج (بعد الانفصال السابق).'
@@ -2331,11 +2434,10 @@
                             </div>
                           )}
 
-                          {/* إذا كانت البطاقة لامرأة: عرض أزواجها وأولادها من كل زوج */}
                           {selectedCardIsFemale && selectedCardMarriages.length > 0 && (
                             <div className="space-y-2">
                               <div className="text-xs font-black text-pink-800 flex items-center gap-1.5">
-                                <Users size="{14}"/> الأزواج والأولاد ({selectedCardMarriages.length}):
+                                <Users size={14} /> الأزواج والأولاد ({selectedCardMarriages.length}):
                               </div>
                               {selectedCardMarriages.map((m, idx) => {
                                 const isDiv = m.status === 'divorced';
@@ -2369,7 +2471,7 @@
                                             : 'bg-emerald-100 text-emerald-800 hover:bg-red-100 hover:text-red-800'
                                         }`}
                                       >
-                                        {isDiv ? <><X size="{12}"/> تم الانفصال (اضغط لإعادة الوصل)</> : <><Check size="{12}"/> متصل (اضغط لتحديد الانفصال)</>}
+                                        {isDiv ? <><X size={12} /> تم الانفصال (اضغط لإعادة الوصل)</> : <><Check size={12} /> متصل (اضغط لتحديد الانفصال)</>}
                                       </button>
                                     </div>
 
@@ -2398,11 +2500,10 @@
                             </div>
                           )}
 
-                          {/* إذا كانت البطاقة لأب: عرض زوجاته وأبناء كل زوجة */}
                           {!selectedCardIsFemale && selectedCardMarriages.length > 0 && (
                             <div className="space-y-2">
                               <div className="text-xs font-black text-sky-900 flex items-center gap-1.5">
-                                <Heart className="text-pink-600" size="{14}"/> الزوجات والأبناء ({selectedCardMarriages.length}):
+                                <Heart size={14} className="text-pink-600" /> الزوجات والأبناء ({selectedCardMarriages.length}):
                               </div>
                               {selectedCardMarriages.map((m, idx) => {
                                 const wife = cardsMap.get(m.wifeId);
@@ -2440,7 +2541,7 @@
                                               : 'bg-emerald-100 text-emerald-800 hover:bg-red-100 hover:text-red-800'
                                           }`}
                                         >
-                                          {isDiv ? <><X size="{12}"/> تم الانفصال</> : <><Check size="{12}"/> متصل</>}
+                                          {isDiv ? <><X size={12} /> تم الانفصال</> : <><Check size={12} /> متصل</>}
                                         </button>
                                         <button
                                           type="button"
@@ -2448,7 +2549,7 @@
                                           title="فك الارتباط"
                                           className="text-gray-400 hover:text-red-600 p-1"
                                         >
-                                          <Trash2 size="{13}"/>
+                                          <Trash2 size={13} />
                                         </button>
                                       </div>
                                     </div>
@@ -2483,7 +2584,11 @@
                       <div className="w-full h-[40vh] min-h-[300px] rounded-3xl overflow-hidden bg-gray-50 relative border border-gray-100 mb-6 flex items-center justify-center p-4">
                         {!galleryShowInfo ? (
                           <div className="w-full h-full flex items-center justify-center animate-in fade-in zoom-in duration-300">
-                            <PersonAvatar ...selectedCard, card="{{" gender: getEffectiveGender(selectedCard) imgClassName="object-contain" sizeClass="w-64 h-64 sm:w-72 sm:h-72" }}/>
+                            <PersonAvatar
+                              card={{ ...selectedCard, gender: getEffectiveGender(selectedCard) }}
+                              sizeClass="w-64 h-64 sm:w-72 sm:h-72"
+                              imgClassName="object-contain"
+                            />
                           </div>
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300 overflow-y-auto">
@@ -2497,17 +2602,17 @@
                         onClick={() => setGalleryShowInfo(!galleryShowInfo)}
                         className="w-full bg-blue-100 text-blue-700 border-2 border-transparent hover:border-blue-200 hover:bg-blue-200 py-4 rounded-2xl transition-all duration-300 font-bold text-xl flex items-center justify-center gap-3 shadow-sm active:scale-95 mb-6"
                       >
-                        <RefreshCw size="{24}"/> {galleryShowInfo ? 'إرجاع الصورة' : 'قلب البطاقة (عرض التفاصيل)'}
+                        <RefreshCw size={24} /> {galleryShowInfo ? 'إرجاع الصورة' : 'قلب البطاقة (عرض التفاصيل)'}
                       </button>
 
                       <div className="flex w-full gap-4">
                         <div className="flex-1 bg-green-50 border border-green-100 rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm">
                           <span className="text-3xl font-black text-green-600 mb-1">{selectedCard.correctCount || 0}</span>
-                          <span className="text-green-800 text-sm font-bold flex items-center gap-1"><Check size="{16}"/> إجابة صحيحة</span>
+                          <span className="text-green-800 text-sm font-bold flex items-center gap-1"><Check size={16}/> إجابة صحيحة</span>
                         </div>
                         <div className="flex-1 bg-red-50 border border-red-100 rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm">
                           <span className="text-3xl font-black text-red-600 mb-1">{selectedCard.wrongCount || 0}</span>
-                          <span className="text-red-800 text-sm font-bold flex items-center gap-1"><X size="{16}"/> إجابة خاطئة</span>
+                          <span className="text-red-800 text-sm font-bold flex items-center gap-1"><X size={16}/> إجابة خاطئة</span>
                         </div>
                       </div>
                     </div>
@@ -2519,7 +2624,7 @@
                   <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in">
                     <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl text-center">
                       <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Trash2 size="{32}"/>
+                        <Trash2 size={32} />
                       </div>
                       <h3 className="text-xl font-black text-gray-800 mb-2">حذف البطاقة؟</h3>
                       <p className="text-sm text-gray-600 mb-6">
@@ -2550,12 +2655,12 @@
                       <div className="flex items-center justify-between mb-4">
                         <div>
                           <h3 className="text-xl font-black text-gray-800 flex items-center gap-2">
-                            <GitFork className="text-indigo-600"/> إضافة فرع / مجلد جديد
+                            <GitFork className="text-indigo-600" /> إضافة فرع / مجلد جديد
                           </h3>
                           <p className="text-xs text-indigo-600 font-bold mt-0.5">يتبع لـ: {CLAN_ROOT_TITLE}</p>
                         </div>
                         <button onClick={() => setShowNewTreeModal(false)} className="text-gray-400 hover:text-gray-700 p-2 rounded-xl bg-gray-100">
-                          <X size="{18}"/>
+                          <X size={18} />
                         </button>
                       </div>
                       <form onSubmit={handleCreateNewTree} className="space-y-4">
@@ -2616,23 +2721,39 @@
                   </div>
                 )}
 
-                {/* نافذة إضافة فرع سريع تحت شخص أو زوجة محددة في المشجرة */}
+                {/* نافذة الإضافة تحت شخص في المشجرة: خيار بين (جديد) أو (اختيار من البطاقات الحالية) */}
                 {quickBranchParent && (
                   <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
-                    <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-black text-gray-800 flex items-center gap-2">
-                          <Plus className="text-blue-600"/> إضافة فرع جديد
-                        </h3>
-                        <button onClick={() => { setQuickBranchParent(null); setQuickBranchMotherId(null); }} className="text-gray-400 hover:text-gray-700 p-2 rounded-xl bg-gray-100">
-                          <X size="{18}"/>
+                    <div className="bg-white rounded-3xl w-full max-w-lg p-6 shadow-2xl max-h-[90vh] flex flex-col">
+                      <div className="flex items-center justify-between mb-4 shrink-0">
+                        <div className="flex items-center gap-2">
+                          {quickBranchMode !== 'choose' && (
+                            <button
+                              type="button"
+                              onClick={() => setQuickBranchMode('choose')}
+                              className="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-xl transition"
+                              title="رجوع للخيارات"
+                            >
+                              <ArrowRight size={18} />
+                            </button>
+                          )}
+                          <h3 className="text-lg font-black text-gray-800 flex items-center gap-2">
+                            <Plus className="text-blue-600" />
+                            {quickBranchMode === 'choose' && 'إضافة ابن / بنت'}
+                            {quickBranchMode === 'new' && 'إضافة فرع جديد'}
+                            {quickBranchMode === 'existing' && 'اختيار بطاقة حالية'}
+                          </h3>
+                        </div>
+                        <button onClick={closeQuickBranchModal} className="text-gray-400 hover:text-gray-700 p-2 rounded-xl bg-gray-100">
+                          <X size={18} />
                         </button>
                       </div>
 
-                      <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200 mb-4 flex items-center gap-3">
-                        <PersonAvatar card="{quickBranchParent}" sizeClass="w-12 h-12"/>
+                      {/* بطاقة الأب/الشخص الذي يتم الإضافة إليه */}
+                      <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200 mb-4 flex items-center gap-3 shrink-0">
+                        <PersonAvatar card={{ ...quickBranchParent, gender: getEffectiveGender(quickBranchParent) }} sizeClass="w-12 h-12" />
                         <div>
-                          <div className="text-xs text-gray-500">إضافة ابن / بنت لـ:</div>
+                          <div className="text-xs text-gray-500">الإضافة كابن / بنت لـ:</div>
                           <div className="font-bold text-gray-800 text-sm">{getDisplayFullName(quickBranchParent)}</div>
                           {quickBranchMotherId && cardsMap.get(quickBranchMotherId) && (
                             <div className="text-xs font-bold text-pink-700 mt-0.5">
@@ -2642,87 +2763,218 @@
                         </div>
                       </div>
 
-                      <form onSubmit={handleAddQuickBranch} className="space-y-4">
-                        {/* اختيار الزوجة (الأم) إذا كان للأب زوجات مسجلات */}
-                        {getEffectiveGender(quickBranchParent) === 'male' && getFatherMarriages(quickBranchParent).length > 0 && (
+                      {/* المرحلة 1: التخيير بين (إضافة جديد) أو (إضافة حالي) */}
+                      {quickBranchMode === 'choose' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
+                          <button
+                            type="button"
+                            onClick={() => setQuickBranchMode('new')}
+                            className="p-5 rounded-2xl border-2 border-blue-200 bg-blue-50/50 hover:bg-blue-100/70 hover:border-blue-500 transition flex flex-col items-center text-center gap-3 group"
+                          >
+                            <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-md group-hover:scale-105 transition">
+                              <UserPlus size={28} />
+                            </div>
+                            <div>
+                              <div className="font-black text-gray-900 text-base mb-1">إضافة جديد</div>
+                              <p className="text-xs text-gray-600 leading-relaxed">
+                                إنشاء بطاقة جديدة بالاسم الأول وربطها مباشرة كابن/بنت
+                              </p>
+                            </div>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setQuickBranchMode('existing')}
+                            className="p-5 rounded-2xl border-2 border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100/70 hover:border-indigo-500 transition flex flex-col items-center text-center gap-3 group"
+                          >
+                            <div className="w-14 h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md group-hover:scale-105 transition">
+                              <UserCheck size={28} />
+                            </div>
+                            <div>
+                              <div className="font-black text-gray-900 text-base mb-1">اختيار حالي</div>
+                              <p className="text-xs text-gray-600 leading-relaxed">
+                                نقل بطاقة موجودة بجميع بياناتها وحذف الأسماء السابقة فوق اسمها الأول لتصبح ابناً له
+                              </p>
+                            </div>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* المرحلة 2 (أ): إضافة شخص جديد */}
+                      {quickBranchMode === 'new' && (
+                        <form onSubmit={handleAddQuickBranch} className="space-y-4 overflow-y-auto">
+                          {getEffectiveGender(quickBranchParent) === 'male' && getFatherMarriages(quickBranchParent).length > 0 && (
+                            <div>
+                              <label className="block text-sm font-bold text-pink-800 mb-1.5">الأم (الزوجة)</label>
+                              <select
+                                value={quickBranchMotherId || ''}
+                                onChange={(e) => setQuickBranchMotherId(e.target.value || null)}
+                                className="w-full border border-pink-200 rounded-xl px-4 py-2.5 bg-pink-50/40 focus:bg-white focus:ring-2 focus:ring-pink-400 outline-none text-sm font-bold"
+                              >
+                                <option value="">-- خط مستقل / بدون تحديد أم --</option>
+                                {getFatherMarriages(quickBranchParent).map(m => {
+                                  const w = cardsMap.get(m.wifeId);
+                                  if (!w) return null;
+                                  return (
+                                    <option key={w.id} value={w.id}>
+                                      {w.firstName || parseNameParts(w.name)[0]} {m.status === 'divorced' ? '(منفصلان)' : ''}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            </div>
+                          )}
+
                           <div>
-                            <label className="block text-sm font-bold text-pink-800 mb-1.5">الأم (الزوجة)</label>
-                            <select
-                              value={quickBranchMotherId || ''}
-                              onChange={(e) => setQuickBranchMotherId(e.target.value || null)}
-                              className="w-full border border-pink-200 rounded-xl px-4 py-2.5 bg-pink-50/40 focus:bg-white focus:ring-2 focus:ring-pink-400 outline-none text-sm font-bold"
-                            >
-                              <option value="">-- خط مستقل / بدون تحديد أم --</option>
-                              {getFatherMarriages(quickBranchParent).map(m => {
-                                const w = cardsMap.get(m.wifeId);
-                                if (!w) return null;
+                            <label className="block text-sm font-bold text-gray-700 mb-1.5">الاسم الأول للفرع (أو اسم متبوع بـ بن / بنت)</label>
+                            <input
+                              type="text"
+                              autoFocus
+                              value={quickBranchName}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setQuickBranchName(val);
+                                const detected = detectGenderFromText(val, null);
+                                if (detected) setQuickBranchGender(detected);
+                              }}
+                              placeholder="مثال: خالد أو سارة بنت خالد..."
+                              className="w-full border border-gray-200 rounded-xl px-4 py-3 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-bold"
+                              required
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1.5">الجنس</label>
+                            <div className="grid grid-cols-2 gap-3">
+                              <button
+                                type="button"
+                                onClick={() => setQuickBranchGender('male')}
+                                className={`p-3 rounded-xl border-2 font-bold text-sm flex items-center justify-center gap-2 transition ${
+                                  quickBranchGender === 'male'
+                                    ? 'border-sky-500 bg-sky-50 text-sky-900'
+                                    : 'border-gray-200 text-gray-600'
+                                }`}
+                              >
+                                <div className="w-7 h-7 rounded-lg overflow-hidden border border-sky-300"><MaleDefaultAvatar /></div>
+                                ذكر (ابن)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setQuickBranchGender('female')}
+                                className={`p-3 rounded-xl border-2 font-bold text-sm flex items-center justify-center gap-2 transition ${
+                                  quickBranchGender === 'female'
+                                    ? 'border-pink-500 bg-pink-50 text-pink-900'
+                                    : 'border-gray-200 text-gray-600'
+                                }`}
+                              >
+                                <div className="w-7 h-7 rounded-full overflow-hidden border border-pink-300"><AsiriWomanAvatar /></div>
+                                أنثى (بنت)
+                              </button>
+                            </div>
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={isSavingBranch}
+                            className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 transition shadow-md flex items-center justify-center gap-2 disabled:opacity-60"
+                          >
+                            {isSavingBranch && <Loader2 className="animate-spin" size={18} />}
+                            إضافة للمشجرة
+                          </button>
+                        </form>
+                      )}
+
+                      {/* المرحلة 2 (ب): عرض جميع البطاقات الحالية للاختيار منها ونقلها كابن */}
+                      {quickBranchMode === 'existing' && (
+                        <div className="flex flex-col flex-1 overflow-hidden">
+                          {getEffectiveGender(quickBranchParent) === 'male' && getFatherMarriages(quickBranchParent).length > 0 && (
+                            <div className="mb-3 shrink-0">
+                              <label className="block text-xs font-bold text-pink-800 mb-1">الأم (الزوجة):</label>
+                              <select
+                                value={quickBranchMotherId || ''}
+                                onChange={(e) => setQuickBranchMotherId(e.target.value || null)}
+                                className="w-full border border-pink-200 rounded-xl px-3 py-2 bg-pink-50/40 focus:bg-white focus:ring-2 focus:ring-pink-400 outline-none text-xs font-bold"
+                              >
+                                <option value="">-- خط مستقل / بدون تحديد أم --</option>
+                                {getFatherMarriages(quickBranchParent).map(m => {
+                                  const w = cardsMap.get(m.wifeId);
+                                  if (!w) return null;
+                                  return (
+                                    <option key={w.id} value={w.id}>
+                                      {w.firstName || parseNameParts(w.name)[0]} {m.status === 'divorced' ? '(منفصلان)' : ''}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            </div>
+                          )}
+
+                          <div className="relative mb-3 shrink-0">
+                            <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 focus-within:ring-2 focus-within:ring-indigo-500">
+                              <Search size={18} className="text-gray-400 ml-2" />
+                              <input
+                                type="text"
+                                autoFocus
+                                value={quickBranchSearch}
+                                onChange={(e) => setQuickBranchSearch(e.target.value)}
+                                placeholder="ابحث بالاسم لاختيار بطاقة حالية..."
+                                className="w-full bg-transparent outline-none text-sm font-bold text-gray-800"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2 rounded-xl text-[11px] font-bold mb-3 shrink-0">
+                            عند اختيار بطاقة: سيتم الإبقاء على <span className="underline">الاسم الأول فقط</span> وحذف الأسماء السابقة فوقه، ونقل البطاقة بجميع بياناتها وصورتها وأبنائها لتكون ابناً لـ ({quickBranchParent.firstName || parseNameParts(quickBranchParent.name)[0]}).
+                          </div>
+
+                          <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1">
+                            {existingCandidateCards.length === 0 ? (
+                              <div className="text-center py-8 text-gray-400 text-sm">
+                                لا توجد بطاقات مطابقة متاحة للنقل.
+                              </div>
+                            ) : (
+                              existingCandidateCards.map(candidate => {
+                                const candFirst = candidate.firstName || parseNameParts(candidate.name)[0] || 'بدون اسم';
+                                const candGender = getEffectiveGender(candidate);
+                                const parentFirst = quickBranchParent.firstName || parseNameParts(quickBranchParent.name)[0];
+                                const parentChain = getLineageChain(quickBranchParent, cardsMap);
+                                const previewNewName = buildFullName([candFirst, ...parentChain], candGender, true);
+
                                 return (
-                                  <option key={w.id} value={w.id}>
-                                    {w.firstName || parseNameParts(w.name)[0]} {m.status === 'divorced' ? '(منفصلان)' : ''}
-                                  </option>
+                                  <button
+                                    key={candidate.id}
+                                    type="button"
+                                    disabled={isSavingBranch}
+                                    onClick={() => handleAttachExistingCardAsChild(candidate)}
+                                    className="w-full text-right p-3 rounded-2xl border border-gray-200 hover:border-indigo-500 hover:bg-indigo-50/50 transition flex items-center gap-3 group disabled:opacity-50"
+                                  >
+                                    <PersonAvatar
+                                      card={{ ...candidate, gender: candGender }}
+                                      sizeClass="w-12 h-12"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-black text-gray-900 text-sm truncate">
+                                        {getDisplayFullName(candidate)}
+                                      </div>
+                                      <div className="text-[11px] text-indigo-700 font-bold truncate mt-0.5">
+                                        سيصبح: {previewNewName}
+                                      </div>
+                                      {candidate.description && (
+                                        <div className="text-[10px] text-gray-400 truncate mt-0.5">
+                                          {candidate.description}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <span className="bg-indigo-100 group-hover:bg-indigo-600 text-indigo-700 group-hover:text-white text-xs font-bold px-3 py-1.5 rounded-xl shrink-0 transition">
+                                      نقل كابن
+                                    </span>
+                                  </button>
                                 );
-                              })}
-                            </select>
-                          </div>
-                        )}
-
-                        <div>
-                          <label className="block text-sm font-bold text-gray-700 mb-1.5">الاسم الأول للفرع (أو اسم متبوع بـ بن / بنت)</label>
-                          <input
-                            type="text"
-                            autoFocus
-                            value={quickBranchName}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setQuickBranchName(val);
-                              const detected = detectGenderFromText(val, null);
-                              if (detected) setQuickBranchGender(detected);
-                            }}
-                            placeholder="مثال: خالد أو سارة بنت خالد..."
-                            className="w-full border border-gray-200 rounded-xl px-4 py-3 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-bold"
-                            required
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-bold text-gray-700 mb-1.5">الجنس</label>
-                          <div className="grid grid-cols-2 gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setQuickBranchGender('male')}
-                              className={`p-3 rounded-xl border-2 font-bold text-sm flex items-center justify-center gap-2 transition ${
-                                quickBranchGender === 'male'
-                                  ? 'border-sky-500 bg-sky-50 text-sky-900'
-                                  : 'border-gray-200 text-gray-600'
-                              }`}
-                            >
-                              <div className="w-7 h-7 rounded-lg overflow-hidden border border-sky-300"><MaleDefaultAvatar/></div>
-                              ذكر (ابن)
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setQuickBranchGender('female')}
-                              className={`p-3 rounded-xl border-2 font-bold text-sm flex items-center justify-center gap-2 transition ${
-                                quickBranchGender === 'female'
-                                  ? 'border-pink-500 bg-pink-50 text-pink-900'
-                                  : 'border-gray-200 text-gray-600'
-                              }`}
-                            >
-                              <div className="w-7 h-7 rounded-full overflow-hidden border border-pink-300"><AsiriWomanAvatar/></div>
-                              أنثى (بنت)
-                            </button>
+                              })
+                            )}
                           </div>
                         </div>
-
-                        <button
-                          type="submit"
-                          disabled={isSavingBranch}
-                          className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 transition shadow-md flex items-center justify-center gap-2 disabled:opacity-60"
-                        >
-                          {isSavingBranch && <Loader2 className="animate-spin" size="{18}"/>}
-                          إضافة للمشجرة
-                        </button>
-                      </form>
+                      )}
                     </div>
                   </div>
                 )}
@@ -2736,7 +2988,7 @@
               return (
                 <div className="max-w-xl mx-auto text-center py-20 bg-white rounded-3xl shadow-sm border border-gray-100 animate-in zoom-in mt-8">
                   <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <Check size="{48}" strokeWidth="{3}"/>
+                    <Check size={48} strokeWidth={3} />
                   </div>
                   <h2 className="text-3xl font-bold text-gray-800 mb-4">انتهى الاختبار!</h2>
                   <button 
@@ -2763,7 +3015,11 @@
                   <div className="w-full h-[50vh] min-h-[380px] rounded-3xl overflow-hidden bg-gray-50 relative border border-gray-100 flex items-center justify-center p-4">
                     {!quizShowInfo ? (
                       <div className="w-full h-full flex items-center justify-center animate-in fade-in zoom-in duration-300">
-                        <PersonAvatar ...currentCard, card="{{" gender: getEffectiveGender(currentCard) imgClassName="object-contain" sizeClass="w-72 h-72 sm:w-80 sm:h-80" }}/>
+                        <PersonAvatar
+                          card={{ ...currentCard, gender: getEffectiveGender(currentCard) }}
+                          sizeClass="w-72 h-72 sm:w-80 sm:h-80"
+                          imgClassName="object-contain"
+                        />
                       </div>
                     ) : (
                       <div key={`info-${currentCard.id}`} className="w-full h-full flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300 overflow-y-auto">
@@ -2780,7 +3036,7 @@
                   
                   {!quizShowInfo && (
                     <div className="absolute -bottom-5 left-1/2 transform -translate-x-1/2 bg-white px-6 py-2 rounded-full shadow-md border border-gray-100 font-bold text-gray-400 text-sm tracking-widest flex items-center gap-2">
-                      من هذا؟ <User size="{16}"/>
+                      من هذا؟ <User size={16} />
                     </div>
                   )}
                 </div>
@@ -2790,7 +3046,7 @@
                     onClick={() => setQuizShowInfo(!quizShowInfo)}
                     className="w-full bg-blue-100 text-blue-700 border-2 border-transparent hover:border-blue-200 hover:bg-blue-200 py-4 rounded-2xl transition-all duration-300 font-bold text-xl flex items-center justify-center gap-3 shadow-sm active:scale-95 animate-in fade-in"
                   >
-                    <RefreshCw size="{24}"/> {quizShowInfo ? 'إرجاع الصورة' : 'قلب البطاقة (عرض الإجابة)'}
+                    <RefreshCw size={24} /> {quizShowInfo ? 'إرجاع الصورة' : 'قلب البطاقة (عرض الإجابة)'}
                   </button>
 
                   <div className="flex w-full gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300 mt-2">
@@ -2798,13 +3054,13 @@
                       onClick={handleWrong}
                       className="flex-1 bg-red-50 text-red-600 border-2 border-red-200 hover:bg-red-600 hover:text-white py-5 rounded-2xl transition-all duration-300 font-bold text-2xl flex items-center justify-center gap-3 shadow-sm hover:shadow-red-200/50 hover:shadow-xl active:scale-95"
                     >
-                      <X size="{32}" strokeWidth="{3}"/> خطأ
+                      <X size={32} strokeWidth={3} /> خطأ
                     </button>
                     <button 
                       onClick={handleCorrect}
                       className="flex-1 bg-green-50 text-green-600 border-2 border-green-200 hover:bg-green-600 hover:text-white py-5 rounded-2xl transition-all duration-300 font-bold text-2xl flex items-center justify-center gap-3 shadow-sm hover:shadow-green-200/50 hover:shadow-xl active:scale-95"
                     >
-                      <Check size="{32}" strokeWidth="{3}"/> صح
+                      <Check size={32} strokeWidth={3} /> صح
                     </button>
                   </div>
                 </div>
@@ -2828,7 +3084,7 @@
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
                   <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('gallery')}>
                     <div className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white p-2.5 rounded-xl shadow-md">
-                      <ImageIcon size="{28}"/>
+                      <ImageIcon size={28} />
                     </div>
                     <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-l from-blue-800 to-indigo-600 tracking-tight">
                       اختبار الذاكرة
@@ -2838,8 +3094,8 @@
               </header>
               <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {view === 'gallery' && renderGallery()}
-                {view === 'add' && <CardFormView onSave="{handleSaveCard}"/>}
-                {view === 'edit' && <CardFormView initialData="{editingCard}" onSave="{handleSaveCard}"/>}
+                {view === 'add' && <CardFormView onSave={handleSaveCard} />}
+                {view === 'edit' && <CardFormView initialData={editingCard} onSave={handleSaveCard} />}
                 {view === 'quiz' && renderQuiz()}
               </main>
             </div>
@@ -2848,7 +3104,7 @@
 
         // تشغيل التطبيق في الصفحة
         const root = createRoot(document.getElementById('root'));
-        root.render(<App/>);
+        root.render(<App />);
     </script>
 </body>
 </html>
