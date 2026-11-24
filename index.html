@@ -85,6 +85,32 @@
             width: 0;
             height: 24px;
         }
+
+        /* تمييز خطوط حزمة الزوجة (الأم) باللون الوردي أو الأحمر الغامق عند الانفصال */
+        .tree li.wife-group-node::before,
+        .tree li.wife-group-node::after {
+            border-color: #f472b6;
+        }
+        .tree li.wife-group-node > ul::before {
+            border-color: #f472b6;
+        }
+        .tree li.wife-group-node > ul > li::before,
+        .tree li.wife-group-node > ul > li::after {
+            border-color: #f472b6;
+        }
+
+        .tree li.wife-group-divorced::before,
+        .tree li.wife-group-divorced::after {
+            border-color: #991b1b;
+        }
+        .tree li.wife-group-divorced > ul::before {
+            border-color: #991b1b;
+        }
+        .tree li.wife-group-divorced > ul > li::before,
+        .tree li.wife-group-divorced > ul > li::after {
+            border-color: #991b1b;
+        }
+
         /* تحسين شريط التمرير */
         .custom-scrollbar::-webkit-scrollbar {
             height: 8px;
@@ -111,12 +137,13 @@
     <!-- كود التطبيق الفعلي -->
     <script type="text/babel" data-type="module">
         // استدعاء مكتبات React والأيقونات و Firebase من روابط CDN مباشرة
-        import React, { useState, useEffect, useMemo } from 'https://esm.sh/react@18';
+        import React, { useState, useEffect, useMemo, useRef, useCallback } from 'https://esm.sh/react@18';
         import { createRoot } from 'https://esm.sh/react-dom@18/client';
         import { 
             Plus, Play, Check, X, Image as ImageIcon, Info, BarChart2, 
             ChevronRight, User, Edit, Trash2, Search, Filter, Folder, 
-            Tag, ArrowRight, RefreshCw, Loader2, GitFork, Users, Sparkles, ZoomIn, ZoomOut
+            Tag, ArrowRight, RefreshCw, Loader2, GitFork, Users, Sparkles, ZoomIn, ZoomOut,
+            Heart, HeartOff, Link2, AlertTriangle
         } from 'https://esm.sh/lucide-react@0.344.0';
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
@@ -144,118 +171,70 @@
         // 1. رسمة امرأة بلبس عسيري تقليدي رمزية بدون وجه مرسومة بالكود (SVG)
         const AsiriWomanAvatar = ({ className = "w-full h-full" }) => (
             <svg viewBox="0 0 120 120" className={className} xmlns="http://www.w3.org/2000/svg">
-                {/* خلفية وردية فاتحة ناعمة */}
                 <rect width="120" height="120" fill="#fdf2f8" />
                 <circle cx="60" cy="60" r="54" fill="#fce7f3" opacity="0.65" />
-
-                {/* الطرحة / الشيلة العسيرية الخلفية السوداء */}
                 <path d="M35 36 C35 19, 85 19, 85 36 L94 92 L26 92 Z" fill="#18181b" />
-
-                {/* حواف الطرحة المطرزة بالخيوط الذهبية والملونة */}
                 <path d="M36 35 C36 20, 84 20, 84 35" fill="none" stroke="#eab308" strokeWidth="2.5" strokeDasharray="3 2" />
                 <path d="M32 52 L27 88 M88 52 L93 88" stroke="#ef4444" strokeWidth="2" strokeDasharray="4 2" />
-
-                {/* الوجه الرمزي (بدون ملامح وجه) */}
                 <ellipse cx="60" cy="40" rx="13" ry="15" fill="#f3d2c1" />
-
-                {/* عصابة الرأس العسيرية التقليدية (المنديل الأصفر والأحمر) */}
                 <path d="M46 31 Q60 25 74 31 L73 35 Q60 29 47 35 Z" fill="#dc2626" />
                 <path d="M47 29 Q60 23 73 29" fill="none" stroke="#facc15" strokeWidth="2" />
-
-                {/* الثوب العسيري الأسود الفضفاض */}
                 <path d="M37 60 C37 54, 83 54, 83 60 L98 120 L22 120 Z" fill="#09090b" />
-
-                {/* تطريز الصدر العسيري الهندسي (القط العسيري) */}
                 <polygon points="60,57 49,73 60,89 71,73" fill="#dc2626" stroke="#facc15" strokeWidth="1.5" />
                 <polygon points="60,62 54,73 60,84 66,73" fill="#16a34a" />
                 <circle cx="60" cy="73" r="2.5" fill="#facc15" />
-
-                {/* الخطوط العسيرية الملونة العمودية والمائلة على الثوب */}
                 <line x1="60" y1="89" x2="60" y2="120" stroke="#facc15" strokeWidth="3" />
                 <line x1="56" y1="87" x2="56" y2="120" stroke="#dc2626" strokeWidth="2" />
                 <line x1="64" y1="87" x2="64" y2="120" stroke="#16a34a" strokeWidth="2" />
-
                 <path d="M46 68 L36 120" stroke="#f97316" strokeWidth="2.5" />
                 <path d="M42 72 L31 120" stroke="#facc15" strokeWidth="1.5" strokeDasharray="4 2" />
-                
                 <path d="M74 68 L84 120" stroke="#f97316" strokeWidth="2.5" />
                 <path d="M78 72 L89 120" stroke="#facc15" strokeWidth="1.5" strokeDasharray="4 2" />
-
                 <polygon points="45,112 49,104 53,112" fill="#dc2626" />
                 <polygon points="67,112 71,104 75,112" fill="#16a34a" />
             </svg>
         );
 
-        // 2. رسمة رجل باللبس السعودي الجنوبي التراثي (ثوب أبيض، غترة وعقال، محزم متقاطع، وبندقية مقمع مائلة) بدون وجه
+        // 2. رسمة رجل باللبس السعودي الجنوبي التراثي
         const MaleDefaultAvatar = ({ className = "w-full h-full" }) => (
             <svg viewBox="0 0 120 120" className={className} xmlns="http://www.w3.org/2000/svg">
-                {/* خلفية زرقاء فاتحة */}
                 <rect width="120" height="120" fill="#e0f2fe" />
                 <circle cx="60" cy="60" r="54" fill="#bae6fd" opacity="0.45" />
-
-                {/* الغترة البيضاء المنسدلة على الكتفين */}
                 <path d="M38 28 C38 15, 82 15, 82 28 L92 86 L28 86 Z" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
-                {/* طيات الغترة الجانبية */}
                 <path d="M42 48 L34 86 M78 48 L86 86" stroke="#e2e8f0" strokeWidth="1.5" />
-
-                {/* الوجه الرمزي (بدون ملامح وجه) */}
                 <ellipse cx="60" cy="37" rx="12" ry="14" fill="#eac0a2" />
-                {/* الرقبة وياقة الثوب */}
                 <rect x="55" y="49" width="10" height="7" fill="#eac0a2" />
-
-                {/* مقدمة الغترة فوق الرأس */}
                 <path d="M46 27 Q60 19 74 27 L76 34 Q60 27 44 34 Z" fill="#ffffff" />
-                {/* العقال الأسود المزدوج */}
                 <rect x="46" y="23" width="28" height="3.2" rx="1.6" fill="#18181b" />
                 <rect x="46" y="27" width="28" height="3.2" rx="1.6" fill="#09090b" />
-                {/* خيوط العقال الذهبية الدقيقة */}
                 <line x1="52" y1="23" x2="52" y2="30" stroke="#eab308" strokeWidth="1" />
                 <line x1="68" y1="23" x2="68" y2="30" stroke="#eab308" strokeWidth="1" />
-
-                {/* الثوب الأبيض الفضفاض والأكمام */}
                 <path d="M35 58 C35 53, 85 53, 85 58 L98 120 L22 120 Z" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
-                {/* ياقة الثوب السعودي */}
                 <path d="M53 53 L60 58 L67 53 L67 57 L60 61 L53 57 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1" />
-                {/* خط الأزرار الأمامي */}
                 <line x1="60" y1="61" x2="60" y2="85" stroke="#cbd5e1" strokeWidth="1" />
-
-                {/* المحزم الجلدي المتقاطع على الصدر (إكس) */}
                 <path d="M46 55 L74 96 L70 98 L42 57 Z" fill="#451a03" />
                 <path d="M74 55 L46 96 L50 98 L78 57 Z" fill="#451a03" />
-                {/* مسامير/زخارف فضية وذهبية على المحزم المتقاطع */}
                 <line x1="44" y1="56" x2="72" y2="97" stroke="#d97706" strokeWidth="1.2" strokeDasharray="3 4" />
                 <line x1="76" y1="56" x2="48" y2="97" stroke="#d97706" strokeWidth="1.2" strokeDasharray="3 4" />
-
-                {/* حزام الخصر الجنوبي الداكن المزخرف */}
                 <rect x="40" y="94" width="40" height="7" rx="2" fill="#292524" />
-                {/* إبزيم الحزام الفضي والزخارف */}
                 <rect x="56" y="93.5" width="8" height="8" rx="1" fill="none" stroke="#e2e8f0" strokeWidth="1.5" />
                 <circle cx="47" cy="97.5" r="1.2" fill="#eab308" />
                 <circle cx="73" cy="97.5" r="1.2" fill="#eab308" />
-
-                {/* البندقية التراثية (المقمع) مائلة من أسفل اليسار إلى أعلى اليمين */}
                 <g transform="rotate(-38 60 72)">
-                    {/* أخمص البندقية الخشبي الداكن (أسفل اليسار) */}
                     <path d="M12 70 L32 69 L32 74 L10 77 C8 77, 8 71, 12 70 Z" fill="#3f2305" stroke="#1c1917" strokeWidth="0.8" />
-                    {/* جسم البندقية الخشبي المطعم بالفضة */}
                     <rect x="32" y="69.5" width="38" height="3.8" rx="1" fill="#78350f" />
-                    {/* الحلقات الفضية المزخرفة على السبطانة */}
                     <rect x="42" y="69" width="2.5" height="4.8" fill="#e2e8f0" />
                     <rect x="54" y="69" width="2.5" height="4.8" fill="#e2e8f0" />
                     <rect x="66" y="69" width="2.5" height="4.8" fill="#e2e8f0" />
-                    {/* ماسورة البندقية الفضية الطويلة (أعلى اليمين) */}
                     <rect x="36" y="68.2" width="66" height="2" rx="0.8" fill="#94a3b8" stroke="#475569" strokeWidth="0.4" />
-                    {/* زناد ومطرقة المقمع */}
                     <path d="M35 73 Q37 76 40 73" fill="none" stroke="#475569" strokeWidth="1" />
                 </g>
-
-                {/* اليدان الممسكتان بالبندقية بشكل مبسط */}
                 <circle cx="43" cy="87" r="3.2" fill="#eac0a2" />
                 <circle cx="67" cy="66" r="3.2" fill="#eac0a2" />
             </svg>
         );
 
-        // مكون موحد لعرض صورة الشخص بإطار الجنس المناسب (مربع أزرق للذكر / دائري وردي للأنثى)
+        // مكون موحد لعرض صورة الشخص بإطار الجنس المناسب
         const PersonAvatar = ({ card, sizeClass = "w-16 h-16", imgClassName = "object-cover" }) => {
             const isFemale = card?.gender === 'female';
             const shapeClass = isFemale
@@ -276,11 +255,11 @@
                                 }}
                             />
                             <div style={{ display: 'none' }} className="w-full h-full">
-                                {isFemale ? <AsiriWomanAvatar /> : <MaleDefaultAvatar />}
+                                {isFemale ? <AsiriWomanAvatar/> : <MaleDefaultAvatar/>}
                             </div>
                         </>
                     ) : (
-                        isFemale ? <AsiriWomanAvatar /> : <MaleDefaultAvatar />
+                        isFemale ? <AsiriWomanAvatar/> : <MaleDefaultAvatar/>
                     )}
                 </div>
             );
@@ -292,31 +271,18 @@
             return fullName.replace(/\s*-\s*آل السعيدي\s*-\s*آل سعد\s*-\s*بلّسمر\s*$/g, '').trim();
         };
 
-        /**
-         * يكتشف الجنس تلقائياً بناءً على وجود كلمة "بنت" أو "بن" في بداية/تسلسل الاسم:
-         * - إذا وُجدت "بنت" قبل الاسم الثاني (الاسم الأول بنت فلان...) -> أنثى ('female')
-         * - إذا وُجدت "بن" (أو "ابن") -> ذكر ('male')
-         * - وإلا يرجع إلى fallbackGender
-         */
         const detectGenderFromText = (rawText, fallbackGender = 'male') => {
             if (!rawText || typeof rawText !== 'string') return fallbackGender;
             const normalized = rawText.replace(/\s+/g, ' ').trim();
-            // مطابقة "بنت" أو "ابنة" كفاصل بين الاسم الأول والذي بعده
             if (/(?:^|\s)(?:بنت|ابنة)(?:\s|$)/i.test(normalized)) {
                 return 'female';
             }
-            // مطابقة "بن" أو "ابن" كفاصل بين الاسم الأول والذي بعده أو الثالث والذي بعده وهكذا
             if (/(?:^|\s)(?:بن|ابن)(?:\s|$)/i.test(normalized)) {
                 return 'male';
             }
             return fallbackGender;
         };
 
-        /**
-         * يقسم النص العربي تلقائياً عند الكلمات الفاصلة (بن / بنت / ابن / ابنة)
-         * مثلاً: "سارة بنت محمد بن علي" -> ["سارة", "محمد", "علي"]
-         * مثلاً: "أحمد بن خالد بن سعيد" -> ["أحمد", "خالد", "سعيد"]
-         */
         const parseNameParts = (fullName) => {
             const withoutClan = stripClanSuffix(fullName);
             if (!withoutClan) return [''];
@@ -334,12 +300,6 @@
             return parts.length > 0 ? parts : [''];
         };
 
-        /**
-         * يبني السلسلة الكاملة للاسم:
-         * - الفاصل بعد الاسم الأول يعتمد على الجنس ("بنت" للأنثى، "بن" للذكر)
-         * - الفواصل بين الأسماء اللاحقة (الثاني والذي بعده، الثالث والذي بعده وهكذا) تكون "بن"
-         * - يلحق المرجع الرئيسي الموحد "آل السعيدي - آل سعد - بلّسمر" عند الطلب
-         */
         const buildFullName = (parts, gender = 'male', includeClan = true) => {
             const validParts = parts.map(p => p.trim()).filter(Boolean);
             if (validParts.length === 0) return '';
@@ -376,24 +336,34 @@
           const [viewMode, setViewMode] = useState('all'); // 'all', 'folders', 'tree'
           const [activeFolder, setActiveFolder] = useState(null);
 
-          // حالات المشجرة الهرمية (تفتح المشجرة الرئيسية مباشرة، والتبويب الفرعي 'ALL' يعرض الجميع)
+          // حالات المشجرة الهرمية
           const [activeTreeSubTab, setActiveTreeSubTab] = useState('ALL');
           const [newTreeTitle, setNewTreeTitle] = useState('');
           const [newTreeRootName, setNewTreeRootName] = useState('');
           const [newTreeRootGender, setNewTreeRootGender] = useState('male');
           const [showNewTreeModal, setShowNewTreeModal] = useState(false);
 
-          // نافذة الإضافة السريعة لفرع تحت شخص في المشجرة
+          // نافذة الإضافة السريعة لفرع تحت شخص أو زوجة محددة في المشجرة
           const [quickBranchParent, setQuickBranchParent] = useState(null);
+          const [quickBranchMotherId, setQuickBranchMotherId] = useState(null);
           const [quickBranchName, setQuickBranchName] = useState('');
           const [quickBranchGender, setQuickBranchGender] = useState('male');
           const [isSavingBranch, setIsSavingBranch] = useState(false);
           const [treeZoom, setTreeZoom] = useState(1);
 
-          // نافذة تأكيد الحذف المخصصة (بدلاً من window.confirm)
+          // --- حالات السحب والربط بين خط الأبناء والأم (الزوجة) ---
+          const [draggingLine, setDraggingLine] = useState(null); 
+          // draggingLine: { fatherId, sourceMotherId, startX, startY, currentX, currentY }
+          const [hoveredWomanId, setHoveredWomanId] = useState(null);
+          const [connectorLines, setConnectorLines] = useState([]);
+          const treeContainerRef = useRef(null);
+          const lineAnchorRefs = useRef(new Map());
+          const womanCardRefs = useRef(new Map());
+
+          // نافذة تأكيد الحذف المخصصة
           const [deleteConfirmCard, setDeleteConfirmCard] = useState(null);
 
-          // إشعار مخصص بدلاً من alert()
+          // إشعار مخصص
           const [toastMessage, setToastMessage] = useState(null);
           const showNotification = (msg, type = 'info') => {
               setToastMessage({ msg, type });
@@ -479,7 +449,7 @@
             });
           });
 
-          // استخراج سلسلة النسب الكاملة لأي بطاقة في المشجرة (من الشخص صعوداً إلى الجد الأعلى)
+          // استخراج سلسلة النسب الكاملة لأي بطاقة في المشجرة
           const getLineageChain = (card, allCardsMap) => {
               const chain = [];
               let current = card;
@@ -497,13 +467,11 @@
               return chain;
           };
 
-          // الجنس الفعلي للبطاقة مع مراعاة الكشف التلقائي من الاسم إذا لم يكن محدداً
           const getEffectiveGender = (card) => {
               if (!card) return 'male';
               return detectGenderFromText(card.name || '', card.gender || 'male');
           };
 
-          // الاسم الكامل المعروض للبطاقة متصلاً دائماً بـ "آل السعيدي - آل سعد - بلّسمر"
           const getDisplayFullName = (card) => {
               if (!card) return 'بدون اسم';
               const chain = getLineageChain(card, cardsMap);
@@ -513,6 +481,316 @@
               }
               const base = stripClanSuffix(card.name);
               return base ? `${base} - ${CLAN_ROOT_TITLE}` : CLAN_ROOT_TITLE;
+          };
+
+          // --- دوال العلاقات الزوجية والأمومة والأبناء ---
+
+          // جلب جميع الزيجات المسجلة لزوج (أب) معين
+          const getFatherMarriages = (fatherCard) => {
+              if (!fatherCard) return [];
+              const explicitMarriages = Array.isArray(fatherCard.marriages) ? [...fatherCard.marriages] : [];
+              const seenWives = new Set(explicitMarriages.map(m => m.wifeId));
+
+              // إضافة أي أم مرتبطة بالأبناء مباشرة عبر motherId ولم تُدرج في marriages بعد
+              cards.forEach(child => {
+                  if (child.parentId === fatherCard.id && child.motherId && !seenWives.has(child.motherId)) {
+                      seenWives.add(child.motherId);
+                      explicitMarriages.push({
+                          wifeId: child.motherId,
+                          status: child.parentsDivorced ? 'divorced' : 'active'
+                      });
+                  }
+              });
+
+              return explicitMarriages.filter(m => cardsMap.has(m.wifeId));
+          };
+
+          // جلب جميع الزيجات المسجلة لامرأة (زوجة/أم) معينة
+          const getWomanMarriages = (womanCard) => {
+              if (!womanCard) return [];
+              const results = [];
+              const seenHusbands = new Set();
+
+              // 1. من سجل marriages في بطاقات الأزواج
+              cards.forEach(person => {
+                  if (Array.isArray(person.marriages)) {
+                      const found = person.marriages.find(m => m.wifeId === womanCard.id);
+                      if (found && !seenHusbands.has(person.id)) {
+                          seenHusbands.add(person.id);
+                          results.push({
+                              husband: person,
+                              status: found.status || 'active',
+                              children: cards.filter(c => c.parentId === person.id && c.motherId === womanCard.id)
+                          });
+                      }
+                  }
+              });
+
+              // 2. من الأبناء الذين يحملون motherId === womanCard.id
+              cards.forEach(child => {
+                  if (child.motherId === womanCard.id && child.parentId && !seenHusbands.has(child.parentId)) {
+                      const husband = cardsMap.get(child.parentId);
+                      if (husband) {
+                          seenHusbands.add(husband.id);
+                          results.push({
+                              husband,
+                              status: child.parentsDivorced ? 'divorced' : 'active',
+                              children: cards.filter(c => c.parentId === husband.id && c.motherId === womanCard.id)
+                          });
+                      }
+                  }
+              });
+
+              return results;
+          };
+
+          // ربط خط الأبناء (أو خط مستقل جديد لزوجة إضافية) بامرأة كأم وزوجة
+          const linkChildrenLineToMother = async (fatherId, sourceMotherId, womanId) => {
+              if (!fatherId || !womanId || fatherId === womanId) return;
+              const father = cardsMap.get(fatherId);
+              const woman = cardsMap.get(womanId);
+              if (!father || !woman) return;
+
+              if (getEffectiveGender(woman) !== 'female') {
+                  showNotification("يرجى سحب الخط وإفلاته على بطاقة امرأة (أنثى) ليتم التعرف عليها كأم", "error");
+                  return;
+              }
+
+              try {
+                  // تحديث قائمة زوجات الأب
+                  const existingMarriages = Array.isArray(father.marriages) ? [...father.marriages] : [];
+                  const marriageIdx = existingMarriages.findIndex(m => m.wifeId === womanId);
+                  if (marriageIdx === -1) {
+                      existingMarriages.push({ wifeId: womanId, status: 'active' });
+                  } else {
+                      existingMarriages[marriageIdx] = { ...existingMarriages[marriageIdx], status: 'active' };
+                  }
+                  await updateDoc(doc(db, "flashcards", father.id), { marriages: existingMarriages });
+
+                  // تحديث سجل الأزواج في بطاقة المرأة
+                  const womanHusbands = Array.isArray(woman.husbandIds) ? [...woman.husbandIds] : [];
+                  if (!womanHusbands.includes(father.id)) {
+                      womanHusbands.push(father.id);
+                      await updateDoc(doc(db, "flashcards", woman.id), { husbandIds: womanHusbands });
+                  }
+
+                  // إذا كان الخط المسحوب هو خط الأبناء غير المرتبطين بأم (sourceMotherId === 'UNASSIGNED')
+                  // نربطهم بهذه الأم، أما إذا كان الأب لديه زوجة سابقة فهذا الخط يمثل حزمة أبناء مستقلة للأم الجديدة
+                  const targetChildren = cards.filter(c => {
+                      if (c.parentId !== father.id) return false;
+                      if (sourceMotherId === 'UNASSIGNED') {
+                          return !c.motherId;
+                      }
+                      return c.motherId === sourceMotherId;
+                  });
+
+                  for (const child of targetChildren) {
+                      await updateDoc(doc(db, "flashcards", child.id), {
+                          motherId: woman.id,
+                          parentsDivorced: false
+                      });
+                  }
+
+                  const womanFirst = woman.firstName || parseNameParts(woman.name)[0];
+                  const fatherFirst = father.firstName || parseNameParts(father.name)[0];
+                  showNotification(
+                      targetChildren.length > 0
+                          ? `تم ربط (${womanFirst}) كأم لـ ${targetChildren.length} من أبناء (${fatherFirst}) وزوجة له`
+                          : `تمت إضافة (${womanFirst}) كزوجة مستقلة لـ (${fatherFirst}) بخط أبناء مستقل`,
+                      "success"
+                  );
+              } catch (err) {
+                  console.error("Error linking mother:", err);
+                  showNotification("حدث خطأ أثناء ربط الأم بخط الأبناء", "error");
+              }
+          };
+
+          // تبديل حالة الزواج بين "قائم" و "تم الانفصال"
+          const toggleMarriageDivorceStatus = async (fatherId, wifeId) => {
+              const father = cardsMap.get(fatherId);
+              if (!father) return;
+              try {
+                  const marriages = getFatherMarriages(father);
+                  const current = marriages.find(m => m.wifeId === wifeId);
+                  const nextStatus = current?.status === 'divorced' ? 'active' : 'divorced';
+
+                  const updatedMarriages = marriages.map(m =>
+                      m.wifeId === wifeId ? { ...m, status: nextStatus } : m
+                  );
+                  await updateDoc(doc(db, "flashcards", father.id), { marriages: updatedMarriages });
+
+                  // تحديث حالة الانفصال لدى أبناء هذه الزوجة من هذا الأب
+                  const sharedChildren = cards.filter(c => c.parentId === fatherId && c.motherId === wifeId);
+                  for (const child of sharedChildren) {
+                      await updateDoc(doc(db, "flashcards", child.id), {
+                          parentsDivorced: nextStatus === 'divorced'
+                      });
+                  }
+
+                  showNotification(
+                      nextStatus === 'divorced'
+                          ? "تم تحديد العلاقة كـ (تم الانفصال) باللون الأحمر الغامق وعلامة X"
+                          : "تمت إعادة حالة الزواج إلى متصل",
+                      "info"
+                  );
+              } catch (err) {
+                  console.error("Error toggling divorce:", err);
+                  showNotification("حدث خطأ أثناء تحديث حالة الانفصال", "error");
+              }
+          };
+
+          // فك ارتباط الزوجة عن خط الأبناء
+          const unlinkMotherFromFather = async (fatherId, wifeId) => {
+              const father = cardsMap.get(fatherId);
+              if (!father) return;
+              try {
+                  const updatedMarriages = (father.marriages || []).filter(m => m.wifeId !== wifeId);
+                  await updateDoc(doc(db, "flashcards", father.id), { marriages: updatedMarriages });
+
+                  const sharedChildren = cards.filter(c => c.parentId === fatherId && c.motherId === wifeId);
+                  for (const child of sharedChildren) {
+                      await updateDoc(doc(db, "flashcards", child.id), {
+                          motherId: null,
+                          parentsDivorced: false
+                      });
+                  }
+                  showNotification("تم فك ارتباط الزوجة من هذا الخط", "info");
+              } catch (err) {
+                  console.error(err);
+              }
+          };
+
+          // حساب إحداثيات الخطوط الوردية / الحمراء الغامقة بين بطاقات الأمهات وخطوط أبنائهن في المشجرة
+          const recomputeMotherConnectorLines = useCallback(() => {
+              if (viewMode !== 'tree' || !treeContainerRef.current) {
+                  setConnectorLines([]);
+                  return;
+              }
+              const containerRect = treeContainerRef.current.getBoundingClientRect();
+              const scrollLeft = treeContainerRef.current.scrollLeft;
+              const scrollTop = treeContainerRef.current.scrollTop;
+
+              const lines = [];
+
+              lineAnchorRefs.current.forEach((anchorEl, anchorKey) => {
+                  if (!anchorEl) return;
+                  // anchorKey format: `${fatherId}__${wifeId}`
+                  const [fatherId, wifeId] = anchorKey.split('__');
+                  if (!wifeId || wifeId === 'UNASSIGNED') return;
+
+                  const womanEl = womanCardRefs.current.get(wifeId);
+                  if (!womanEl) return;
+
+                  const aRect = anchorEl.getBoundingClientRect();
+                  const wRect = womanEl.getBoundingClientRect();
+
+                  const x1 = (wRect.left - containerRect.left) + scrollLeft + wRect.width / 2;
+                  const y1 = (wRect.top - containerRect.top) + scrollTop + wRect.height / 2;
+                  const x2 = (aRect.left - containerRect.left) + scrollLeft + aRect.width / 2;
+                  const y2 = (aRect.top - containerRect.top) + scrollTop + aRect.height / 2;
+
+                  const father = cardsMap.get(fatherId);
+                  const marriage = father ? getFatherMarriages(father).find(m => m.wifeId === wifeId) : null;
+                  const isDivorced = marriage?.status === 'divorced';
+
+                  lines.push({
+                      key: anchorKey,
+                      fatherId,
+                      wifeId,
+                      x1,
+                      y1,
+                      x2,
+                      y2,
+                      isDivorced
+                  });
+              });
+
+              setConnectorLines(lines);
+          }, [viewMode, cards, cardsMap, activeTreeSubTab, treeZoom, searchQuery]);
+
+          useEffect(() => {
+              const timer = setTimeout(recomputeMotherConnectorLines, 80);
+              window.addEventListener('resize', recomputeMotherConnectorLines);
+              return () => {
+                  clearTimeout(timer);
+                  window.removeEventListener('resize', recomputeMotherConnectorLines);
+              };
+          }, [recomputeMotherConnectorLines]);
+
+          // مستمعو أحداث السحب والإفلات بالماوس / اللمس لربط خط الأبناء بالأم
+          useEffect(() => {
+              if (!draggingLine) return;
+
+              const handlePointerMove = (e) => {
+                  if (!treeContainerRef.current) return;
+                  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                  const rect = treeContainerRef.current.getBoundingClientRect();
+                  const x = (clientX - rect.left) + treeContainerRef.current.scrollLeft;
+                  const y = (clientY - rect.top) + treeContainerRef.current.scrollTop;
+
+                  setDraggingLine(prev => prev ? { ...prev, currentX: x, currentY: y } : null);
+
+                  // اكتشاف بطاقة المرأة تحت المؤشر
+                  let foundWomanId = null;
+                  womanCardRefs.current.forEach((el, wId) => {
+                      if (!el) return;
+                      const wRect = el.getBoundingClientRect();
+                      if (
+                          clientX >= wRect.left - 8 &&
+                          clientX <= wRect.right + 8 &&
+                          clientY >= wRect.top - 8 &&
+                          clientY <= wRect.bottom + 8
+                      ) {
+                          foundWomanId = wId;
+                      }
+                  });
+                  setHoveredWomanId(foundWomanId);
+              };
+
+              const handlePointerUp = async () => {
+                  if (draggingLine && hoveredWomanId) {
+                      await linkChildrenLineToMother(
+                          draggingLine.fatherId,
+                          draggingLine.sourceMotherId,
+                          hoveredWomanId
+                      );
+                  }
+                  setDraggingLine(null);
+                  setHoveredWomanId(null);
+              };
+
+              window.addEventListener('mousemove', handlePointerMove);
+              window.addEventListener('mouseup', handlePointerUp);
+              window.addEventListener('touchmove', handlePointerMove, { passive: false });
+              window.addEventListener('touchend', handlePointerUp);
+
+              return () => {
+                  window.removeEventListener('mousemove', handlePointerMove);
+                  window.removeEventListener('mouseup', handlePointerUp);
+                  window.removeEventListener('touchmove', handlePointerMove);
+                  window.removeEventListener('touchend', handlePointerUp);
+              };
+          }, [draggingLine, hoveredWomanId]);
+
+          const startDraggingFromAnchor = (e, fatherId, sourceMotherId) => {
+              e.stopPropagation();
+              e.preventDefault();
+              if (!treeContainerRef.current) return;
+              const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+              const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+              const rect = treeContainerRef.current.getBoundingClientRect();
+              const x = (clientX - rect.left) + treeContainerRef.current.scrollLeft;
+              const y = (clientY - rect.top) + treeContainerRef.current.scrollTop;
+
+              setDraggingLine({
+                  fatherId,
+                  sourceMotherId,
+                  startX: x,
+                  startY: y,
+                  currentX: x,
+                  currentY: y
+              });
           };
 
           // دوال الاختبار
@@ -560,7 +838,7 @@
             setQuizShowInfo(false);
           };
 
-          // حفظ أو تعديل بطاقة مع دعم تسلسل النسب والربط التلقائي بالمشجرة والجذر الرئيسي
+          // حفظ أو تعديل بطاقة
           const handleSaveCard = async (cardData, isEdit, id, nameParts = []) => {
             try {
               let resolvedParentId = cardData.parentId || null;
@@ -577,7 +855,6 @@
                   ? buildFullName(cleanParts, effectiveGender, true)
                   : (cardData.name ? `${stripClanSuffix(cardData.name)} - ${CLAN_ROOT_TITLE}` : '');
 
-              // البحث عن مطابقة لسلسلة الآباء في المشجرة الموجودة (بدءاً من الاسم الثاني)
               if (cleanParts.length > 1) {
                   const ancestorSequence = cleanParts.slice(1);
                   
@@ -602,7 +879,6 @@
                           });
                       }
                   } else {
-                      // لم يوجد تسلسل مطابق: إنشاء العقد الأبوية المفقودة من الأعلى للأسفل تحت الجذر الرئيسي
                       let currentParentId = null;
                       for (let i = cleanParts.length - 1; i >= 1; i--) {
                           const ancestorFirst = cleanParts[i];
@@ -636,12 +912,25 @@
                   }
               }
 
+              // إذا كان للأب زوجة واحدة فقط نشطة، نربط الابن الجديد بها تلقائياً ما لم يُحدد غير ذلك
+              let resolvedMotherId = cardData.motherId !== undefined ? cardData.motherId : (isEdit ? initialData?.motherId || null : null);
+              if (!resolvedMotherId && resolvedParentId) {
+                  const fatherObj = cardsMap.get(resolvedParentId);
+                  if (fatherObj) {
+                      const activeWives = getFatherMarriages(fatherObj).filter(m => m.status !== 'divorced');
+                      if (activeWives.length === 1) {
+                          resolvedMotherId = activeWives[0].wifeId;
+                      }
+                  }
+              }
+
               const finalPayload = {
                   ...cardData,
                   name: fullName,
                   firstName: firstName,
                   gender: effectiveGender,
                   parentId: resolvedParentId,
+                  motherId: resolvedMotherId || null,
                   tags: resolvedTags
               };
 
@@ -672,6 +961,10 @@
               for (const child of children) {
                   await updateDoc(doc(db, "flashcards", child.id), { parentId: null });
               }
+              const maternalChildren = cards.filter(c => c.motherId === id);
+              for (const child of maternalChildren) {
+                  await updateDoc(doc(db, "flashcards", child.id), { motherId: null });
+              }
               await deleteDoc(doc(db, "flashcards", id));
               setDeleteConfirmCard(null);
               setSelectedCard(null);
@@ -688,7 +981,7 @@
             setView('edit');
           };
 
-          // إنشاء فرع مجلد جديد تحت المشجرة الرئيسية (آل السعيدي - آل سعد - بلّسمر)
+          // إنشاء فرع مجلد جديد تحت المشجرة الرئيسية
           const handleCreateNewTree = async (e) => {
               e.preventDefault();
               const title = newTreeTitle.trim();
@@ -726,7 +1019,7 @@
               }
           };
 
-          // إضافة فرع (ابن/بنت) سريع تحت شخص في المشجرة
+          // إضافة فرع (ابن/بنت) سريع تحت شخص أو تحت زوجة معينة في المشجرة
           const handleAddQuickBranch = async (e) => {
               e.preventDefault();
               const rawInput = quickBranchName.trim();
@@ -746,12 +1039,22 @@
                       ? [...quickBranchParent.tags]
                       : (activeTreeSubTab !== 'ALL' ? [activeTreeSubTab] : []);
 
+                  // تحديد الأم إذا تم اختيارها أو إذا كان للأب زوجة واحدة
+                  let targetMotherId = quickBranchMotherId || null;
+                  if (!targetMotherId) {
+                      const activeWives = getFatherMarriages(quickBranchParent).filter(m => m.status !== 'divorced');
+                      if (activeWives.length === 1) {
+                          targetMotherId = activeWives[0].wifeId;
+                      }
+                  }
+
                   const newChildRef = doc(collection(db, "flashcards"));
                   await setDoc(newChildRef, {
                       name: fullName,
                       firstName: childFirst,
                       gender: detectedGender,
                       parentId: quickBranchParent.id,
+                      motherId: targetMotherId,
                       tags: parentTags,
                       description: '',
                       image: '',
@@ -763,6 +1066,7 @@
                   setQuickBranchName('');
                   setQuickBranchGender('male');
                   setQuickBranchParent(null);
+                  setQuickBranchMotherId(null);
                   showNotification(`تمت إضافة "${childFirst}" (${detectedGender === 'female' ? 'أنثى - بنت' : 'ذكر - بن'}) كفرع في المشجرة`, "success");
               } catch (err) {
                   console.error(err);
@@ -772,7 +1076,7 @@
               }
           };
 
-          // --- مكون نموذج إضافة/تعديل بطاقة مع التعرف التلقائي على فواصل "بن" و"بنت" والجنس ---
+          // --- مكون نموذج إضافة/تعديل بطاقة ---
           const CardFormView = ({ initialData, onSave }) => {
             const isEdit = !!initialData;
             
@@ -785,6 +1089,7 @@
             const [nameParts, setNameParts] = useState(initialParts);
             const [gender, setGender] = useState(initialData ? getEffectiveGender(initialData) : 'male');
             const [genderLockedByUser, setGenderLockedByUser] = useState(false);
+            const [motherId, setMotherId] = useState(initialData?.motherId || '');
             const [description, setDescription] = useState(initialData?.description || '');
             const [image, setImage] = useState(initialData?.image || '');
             const [imageFile, setImageFile] = useState(null);
@@ -796,7 +1101,10 @@
             const [focusedPartIndex, setFocusedPartIndex] = useState(null);
             const [autoSplitNotice, setAutoSplitNotice] = useState('');
 
-            // دالة تعالج النص عند كتابة عبارة مثل "فاطمة بنت سعد بن علي" أو "سالم بن راشد بن حمد"
+            const femaleCards = useMemo(() => {
+                return cards.filter(c => getEffectiveGender(c) === 'female' && (!isEdit || c.id !== initialData.id));
+            }, [cards, isEdit, initialData]);
+
             const applySmartNameParsing = (rawVal, slotIndex) => {
                 const hasExplicitConnector = /\s+(?:بن|بنت|ابن|ابنة)(?:\s+|$)/i.test(rawVal);
                 if (hasExplicitConnector) {
@@ -987,6 +1295,7 @@
                         name: fullName, 
                         firstName: nameParts[0]?.trim() || '',
                         gender,
+                        motherId: motherId || null,
                         description, 
                         image: finalImageUrl, 
                         tags,
@@ -1011,12 +1320,12 @@
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
                     <span className="bg-blue-100 text-blue-600 p-2 rounded-xl">
-                      {isEdit ? <Edit size={24} /> : <Plus size={24} />}
+                      {isEdit ? <Edit size="{24}"/> : <Plus size="{24}"/>}
                     </span>
                     {isEdit ? 'تعديل البطاقة' : 'إضافة بطاقة جديدة'}
                   </h2>
                   <button onClick={() => { setView('gallery'); setEditingCard(null); }} className="text-gray-500 hover:text-gray-800 flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-xl transition">
-                    عودة <ChevronRight size={18} />
+                    عودة <ChevronRight size="{18}"/>
                   </button>
                 </div>
 
@@ -1035,7 +1344,7 @@
                         }`}
                       >
                         <div className="w-12 h-12 rounded-xl bg-sky-100 border-2 border-sky-300 overflow-hidden shrink-0">
-                          <MaleDefaultAvatar />
+                          <MaleDefaultAvatar/>
                         </div>
                         <div className="text-right">
                           <div className="font-bold text-base">ذكر (بن)</div>
@@ -1053,7 +1362,7 @@
                         }`}
                       >
                         <div className="w-12 h-12 rounded-full bg-pink-100 border-2 border-pink-300 overflow-hidden shrink-0">
-                          <AsiriWomanAvatar />
+                          <AsiriWomanAvatar/>
                         </div>
                         <div className="text-right">
                           <div className="font-bold text-base">أنثى (بنت)</div>
@@ -1063,11 +1372,11 @@
                     </div>
                   </div>
 
-                  {/* تسلسل الأسماء (الاسم الأول - الاسم الثاني - الاسم الثالث...) مع التعرف التلقائي على (بن) و(بنت) */}
+                  {/* تسلسل الأسماء */}
                   <div className="bg-gray-50/80 p-4 rounded-2xl border border-gray-200">
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-gray-800 font-bold flex items-center gap-2">
-                        <GitFork size={18} className="text-blue-600" />
+                        <GitFork className="text-blue-600" size="{18}"/>
                         تسلسل الاسم (الاسم الأول - الثاني - الثالث...)
                       </label>
                       <button
@@ -1075,7 +1384,7 @@
                         onClick={handleAddNameSlot}
                         className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition"
                       >
-                        <Plus size={14} /> إضافة اسم أب/جد
+                        <Plus size="{14}"/> إضافة اسم أب/جد
                       </button>
                     </div>
                     <p className="text-xs text-gray-500 mb-3">
@@ -1084,16 +1393,16 @@
 
                     {autoSplitNotice && (
                       <div className="mb-3 bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-bold px-3 py-2 rounded-xl flex items-center justify-between">
-                        <span className="flex items-center gap-1.5"><Sparkles size={14} className="text-indigo-600" /> {autoSplitNotice}</span>
+                        <span className="flex items-center gap-1.5"><Sparkles className="text-indigo-600" size="{14}"/> {autoSplitNotice}</span>
                         <button type="button" onClick={() => setAutoSplitNotice('')} className="text-indigo-400 hover:text-indigo-700">
-                          <X size={14} />
+                          <X size="{14}"/>
                         </button>
                       </div>
                     )}
 
                     <div className="flex flex-wrap items-center gap-2 relative">
                       {nameParts.map((part, idx) => (
-                        <React.Fragment key={idx}>
+                        <React.Fragment key="{idx}">
                           {idx > 0 && (
                             <span className={`text-xs font-black px-2 py-0.5 rounded-md ${
                               idx === 1 && gender === 'female'
@@ -1128,15 +1437,14 @@
                                 className="absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-red-500 p-0.5"
                                 title="حذف هذه الخانة"
                               >
-                                <X size={14} />
+                                <X size="{14}"/>
                               </button>
                             )}
 
-                            {/* قائمة الإكمال التلقائي من المشجرة */}
                             {focusedPartIndex === idx && autocompleteSuggestions.length > 0 && (
                               <div className="absolute z-30 right-0 mt-1 w-64 bg-white rounded-2xl shadow-xl border border-blue-100 overflow-hidden animate-in fade-in">
                                 <div className="bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-700 flex items-center gap-1">
-                                  <Sparkles size={12} /> تسلسلات موجودة في المشجرة:
+                                  <Sparkles size="{12}"/> تسلسلات موجودة في المشجرة:
                                 </div>
                                 {autocompleteSuggestions.map(({ card, chain }) => (
                                   <button
@@ -1153,7 +1461,7 @@
                                         </span>
                                       )}
                                     </div>
-                                    <ChevronRight size={14} className="text-gray-400 rotate-180" />
+                                    <ChevronRight className="text-gray-400 rotate-180" size="{14}"/>
                                   </button>
                                 ))}
                               </div>
@@ -1171,17 +1479,38 @@
                         {nameParts.slice(1).some(p => p.trim()) && (
                           matchedAncestorCard ? (
                             <span className="bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full font-bold inline-flex items-center gap-1 w-fit">
-                              <Check size={12} /> سيرتبط تلقائياً كفرع لـ ({matchedAncestorCard.firstName || parseNameParts(matchedAncestorCard.name)[0]})
+                              <Check size="{12}"/> سيرتبط تلقائياً كفرع لـ ({matchedAncestorCard.firstName || parseNameParts(matchedAncestorCard.name)[0]})
                             </span>
                           ) : (
                             <span className="bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full font-bold inline-flex items-center gap-1 w-fit">
-                              <GitFork size={12} /> سينشئ تسلسل جديد تحت {CLAN_ROOT_TITLE}
+                              <GitFork size="{12}"/> سينشئ تسلسل جديد تحت {CLAN_ROOT_TITLE}
                             </span>
                           )
                         )}
                       </div>
                     )}
                   </div>
+
+                  {/* اختيار الأم (اختياري) */}
+                  {femaleCards.length > 0 && (
+                    <div className="bg-pink-50/60 p-4 rounded-2xl border border-pink-200">
+                      <label className="block text-pink-900 font-bold mb-1.5 flex items-center gap-2 text-sm">
+                        <Heart className="text-pink-600" size="{16}"/> الأم (اختياري - أو اسحب خط الأبناء في المشجرة إلى الأم مباشرة)
+                      </label>
+                      <select
+                        value={motherId}
+                        onChange={(e) => setMotherId(e.target.value)}
+                        className="w-full border border-pink-200 rounded-xl px-4 py-2.5 bg-white text-gray-800 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-pink-400"
+                      >
+                        <option value="">-- بدون تحديد أم حالياً --</option>
+                        {femaleCards.map(f => (
+                          <option key={f.id} value={f.id}>
+                            {getDisplayFullName(f)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-gray-700 font-bold mb-2">التصنيفات (المجلدات / تبويبات المشجرة)</label>
@@ -1190,7 +1519,7 @@
                         {tags.map(tag => (
                           <span key={tag} className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full flex items-center gap-1.5 text-sm font-medium">
                             {tag} 
-                            <X size={14} className="cursor-pointer hover:text-red-500 transition" onClick={() => handleRemoveTag(tag)} />
+                            <X className="cursor-pointer hover:text-red-500 transition" onClick="{()" size="{14}"> handleRemoveTag(tag)} />
                           </span>
                         ))}
                       </div>
@@ -1223,7 +1552,7 @@
                       <div className="flex items-center justify-center w-full">
                         <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition">
                           <div className="flex flex-col items-center justify-center pt-4 pb-5">
-                            <ImageIcon className="w-7 h-7 mb-2 text-gray-400" />
+                            <ImageIcon className="w-7 h-7 mb-2 text-gray-400"/>
                             <p className="text-sm text-gray-500 font-medium">اضغط لرفع صورة من جهازك أو الصقها (Ctrl+V)</p>
                           </div>
                           <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
@@ -1231,11 +1560,7 @@
                       </div>
                     </div>
                     <div className="mt-4 flex justify-center">
-                      <PersonAvatar
-                        card={{ image, gender, name: previewFullName }}
-                        sizeClass="w-28 h-28"
-                        imgClassName="object-contain"
-                      />
+                      <PersonAvatar card="{{" gender, image, imgClassName="object-contain" name: previewFullName sizeClass="w-28 h-28" }}/>
                     </div>
                   </div>
 
@@ -1254,7 +1579,7 @@
                     disabled={isUploading}
                     className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl hover:bg-blue-700 transition shadow-lg shadow-blue-200 text-lg flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                   >
-                    {isUploading ? <Loader2 className="animate-spin" size={24} /> : null}
+                    {isUploading ? <Loader2 className="animate-spin" size="{24}"/> : null}
                     {isUploading ? 'جاري معالجة البيانات والحفظ...' : (isEdit ? 'حفظ التعديلات' : 'حفظ وإضافة')}
                   </button>
                 </form>
@@ -1262,66 +1587,235 @@
             );
           };
 
-          // --- مكون عقدة الشجرة الهرمية المتداخلة (Recursive Tree Node) ---
+          // --- مكون عقدة الشجرة الهرمية المتداخلة مع دعم تعدد الزوجات وخطوط الأبناء المستقلة لكل أم ---
           const TreeNodeItem = ({ node, childrenMap }) => {
-              const children = childrenMap.get(node.id) || [];
+              const allChildren = childrenMap.get(node.id) || [];
               const firstNameDisplay = node.firstName || parseNameParts(node.name)[0] || 'بدون اسم';
               const isFemale = getEffectiveGender(node) === 'female';
+              const isDropTarget = isFemale && hoveredWomanId === node.id;
+
+              // إذا كان الأب (ذكر) ولديه زوجات مسجلات أو أبناء مقسمون حسب الأم
+              const marriages = !isFemale ? getFatherMarriages(node) : [];
+              const hasMultipleWivesOrMothers = !isFemale && marriages.length > 0;
+
+              // تجميع الأبناء حسب الأم (motherId)
+              const wifeBundles = useMemo(() => {
+                  if (isFemale) return [];
+                  const bundles = [];
+                  const assignedChildIds = new Set();
+
+                  marriages.forEach(m => {
+                      const wifeCard = cardsMap.get(m.wifeId);
+                      if (!wifeCard) return;
+                      const kids = allChildren.filter(c => c.motherId === m.wifeId);
+                      kids.forEach(k => assignedChildIds.add(k.id));
+                      bundles.push({
+                          wifeId: m.wifeId,
+                          wifeCard,
+                          status: m.status || 'active',
+                          children: kids
+                      });
+                  });
+
+                  const unassignedKids = allChildren.filter(c => !assignedChildIds.has(c.id));
+                  if (unassignedKids.length > 0) {
+                      bundles.push({
+                          wifeId: 'UNASSIGNED',
+                          wifeCard: null,
+                          status: 'active',
+                          children: unassignedKids
+                      });
+                  }
+                  return bundles;
+              }, [isFemale, marriages, allChildren, cardsMap]);
 
               return (
                   <li>
                       <div className="group relative flex flex-col items-center">
-                          {/* بطاقة الشخص المصغرة في المشجرة (الصورة والاسم الأول فقط) */}
+                          {/* بطاقة الشخص المصغرة في المشجرة */}
                           <div
+                              ref={(el) => {
+                                  if (isFemale) {
+                                      if (el) womanCardRefs.current.set(node.id, el);
+                                      else womanCardRefs.current.delete(node.id);
+                                  }
+                              }}
                               onClick={() => { setSelectedCard(node); setGalleryShowInfo(false); }}
-                              title={`عرض بطاقة: ${getDisplayFullName(node)}`}
-                              className={`cursor-pointer p-2.5 rounded-2xl border-2 transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 flex flex-col items-center min-w-[92px] max-w-[115px] bg-white ${
-                                  isFemale
-                                      ? 'border-pink-200 hover:border-pink-400 bg-gradient-to-b from-white to-pink-50/40'
-                                      : 'border-sky-200 hover:border-sky-400 bg-gradient-to-b from-white to-sky-50/40'
+                              title={isFemale ? `بطاقة: ${getDisplayFullName(node)} (أسقط خط الأبناء هنا لربطها كأم)` : `عرض بطاقة: ${getDisplayFullName(node)}`}
+                              className={`cursor-pointer p-2.5 rounded-2xl border-2 transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 flex flex-col items-center min-w-[92px] max-w-[115px] bg-white relative ${
+                                  isDropTarget
+                                      ? 'border-pink-600 ring-4 ring-pink-300 scale-110 bg-pink-50 z-20'
+                                      : isFemale
+                                          ? 'border-pink-200 hover:border-pink-400 bg-gradient-to-b from-white to-pink-50/40'
+                                          : 'border-sky-200 hover:border-sky-400 bg-gradient-to-b from-white to-sky-50/40'
                               }`}
                           >
-                              <PersonAvatar card={node} sizeClass="w-14 h-14" />
+                              {isDropTarget && (
+                                  <span className="absolute -top-6 bg-pink-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shadow">
+                                      أفلت للربط كأم
+                                  </span>
+                              )}
+                              <PersonAvatar 'female' 'male' ...node, : ? card="{{" gender: isFemale sizeClass="w-14 h-14" }}/>
                               <span className="mt-2 font-extrabold text-sm text-gray-800 truncate w-full text-center">
                                   {firstNameDisplay}
                               </span>
                           </div>
 
-                          {/* زر إضافة فرع (ابن/بنت) تحت هذا الشخص مباشرة */}
-                          <button
-                              type="button"
-                              onClick={(e) => {
-                                  e.stopPropagation();
-                                  setQuickBranchParent(node);
-                                  setQuickBranchName('');
-                                  setQuickBranchGender('male');
-                              }}
-                              title={`إضافة فرع (ابن/بنت) لـ ${firstNameDisplay}`}
-                              className={`mt-1.5 w-6 h-6 rounded-full flex items-center justify-center text-white shadow-sm transition-transform hover:scale-110 active:scale-95 z-10 ${
-                                  isFemale ? 'bg-pink-500 hover:bg-pink-600' : 'bg-sky-500 hover:bg-sky-600'
-                              }`}
-                          >
-                              <Plus size={14} strokeWidth={3} />
-                          </button>
+                          {/* أزرار التحكم أسفل الشخص: إضافة ابن/بنت + مقبض السحب لربط خط الأبناء بأم */}
+                          <div className="mt-1.5 flex items-center gap-1.5 z-10">
+                              <button
+                                  type="button"
+                                  onClick={(e) => {
+                                      e.stopPropagation();
+                                      setQuickBranchParent(node);
+                                      setQuickBranchMotherId(null);
+                                      setQuickBranchName('');
+                                      setQuickBranchGender('male');
+                                  }}
+                                  title={`إضافة فرع (ابن/بنت) لـ ${firstNameDisplay}`}
+                                  className={`w-6 h-6 rounded-full flex items-center justify-center text-white shadow-sm transition-transform hover:scale-110 active:scale-95 ${
+                                      isFemale ? 'bg-pink-500 hover:bg-pink-600' : 'bg-sky-500 hover:bg-sky-600'
+                                  }`}
+                              >
+                                  <Plus size="{14}" strokeWidth="{3}"/>
+                              </button>
+
+                              {/* مقبض السحب من خط الأب لربط أبنائه أو إضافة زوجة جديدة بخط مستقل */}
+                              {!isFemale && (
+                                  <button
+                                      type="button"
+                                      ref={(el) => {
+                                          if (!hasMultipleWivesOrMothers) {
+                                              if (el) lineAnchorRefs.current.set(`${node.id}__UNASSIGNED`, el);
+                                              else lineAnchorRefs.current.delete(`${node.id}__UNASSIGNED`);
+                                          }
+                                      }}
+                                      onMouseDown={(e) => startDraggingFromAnchor(e, node.id, 'UNASSIGNED')}
+                                      onTouchStart={(e) => startDraggingFromAnchor(e, node.id, 'UNASSIGNED')}
+                                      title="اسحب هذا المقبض إلى بطاقة امرأة لربطها كزوجة وأم لأبنائه (أو لإضافة زوجة إضافية بخط مستقل)"
+                                      className="w-6 h-6 rounded-full bg-pink-100 hover:bg-pink-500 text-pink-600 hover:text-white border border-pink-300 flex items-center justify-center shadow-sm cursor-grab active:cursor-grabbing transition"
+                                  >
+                                      <Heart size="{12}"/>
+                                  </button>
+                              )}
+                          </div>
                       </div>
 
-                      {/* الأبناء والأحفاد المتفرعون للأسفل */}
-                      {children.length > 0 && (
+                      {/* الحالة 1: الأب لديه زوجة/زوجات مسجلة -> يخرج لكل أم خط أبناء مستقل متصل بها */}
+                      {hasMultipleWivesOrMothers ? (
                           <ul>
-                              {children.map(child => (
-                                  <TreeNodeItem
-                                      key={child.id}
-                                      node={child}
-                                      childrenMap={childrenMap}
-                                  />
-                              ))}
+                              {wifeBundles.map(bundle => {
+                                  const isUnassigned = bundle.wifeId === 'UNASSIGNED';
+                                  const isDivorced = bundle.status === 'divorced';
+                                  const wifeFirstName = bundle.wifeCard
+                                      ? (bundle.wifeCard.firstName || parseNameParts(bundle.wifeCard.name)[0])
+                                      : 'بدون أم محددة';
+                                  const anchorKey = `${node.id}__${bundle.wifeId}`;
+
+                                  return (
+                                      <li
+                                          key={anchorKey}
+                                          className={
+                                              isUnassigned
+                                                  ? ''
+                                                  : isDivorced
+                                                      ? 'wife-group-node wife-group-divorced'
+                                                      : 'wife-group-node'
+                                          }
+                                      >
+                                          {/* نقطة اتصال خط هذه الحزمة من الأبناء بالأم + خيارات الانفصال وإضافة ابن لهذه الأم */}
+                                          <div
+                                              ref={(el) => {
+                                                  if (el) lineAnchorRefs.current.set(anchorKey, el);
+                                                  else lineAnchorRefs.current.delete(anchorKey);
+                                              }}
+                                              onMouseDown={(e) => startDraggingFromAnchor(e, node.id, bundle.wifeId)}
+                                              onTouchStart={(e) => startDraggingFromAnchor(e, node.id, bundle.wifeId)}
+                                              title="اسحب إلى امرأة لربط أو تغيير الأم لهذا الخط المستقل"
+                                              className={`cursor-grab active:cursor-grabbing px-2.5 py-1 rounded-full border text-[11px] font-bold flex items-center gap-1.5 shadow-sm transition mb-1 ${
+                                                  isUnassigned
+                                                      ? 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-pink-50 hover:border-pink-300'
+                                                      : isDivorced
+                                                          ? 'bg-red-900 border-red-950 text-white'
+                                                          : 'bg-pink-100 border-pink-400 text-pink-900 hover:bg-pink-200'
+                                              }`}
+                                          >
+                                              <span className={`w-2 h-2 rounded-full ${isUnassigned ? 'bg-gray-400' : isDivorced ? 'bg-red-300' : 'bg-pink-500'}`}></span>
+                                              <span>
+                                                  {isUnassigned ? 'أبناء غير مرتبطين بأم' : `أبناء: ${wifeFirstName}`}
+                                              </span>
+                                              {isDivorced && (
+                                                  <span className="bg-red-700 text-[9px] px-1.5 py-0.2 rounded-full">منفصلان ✕</span>
+                                              )}
+
+                                              {/* زر إضافة ابن/بنت مباشرة ضمن خط هذه الأم */}
+                                              <button
+                                                  type="button"
+                                                  onMouseDown={(e) => e.stopPropagation()}
+                                                  onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setQuickBranchParent(node);
+                                                      setQuickBranchMotherId(isUnassigned ? null : bundle.wifeId);
+                                                      setQuickBranchName('');
+                                                      setQuickBranchGender('male');
+                                                  }}
+                                                  title={isUnassigned ? 'إضافة ابن/بنت' : `إضافة ابن/بنت لـ (${firstNameDisplay}) و(${wifeFirstName})`}
+                                                  className="w-4 h-4 rounded-full bg-white/80 hover:bg-white text-gray-800 flex items-center justify-center"
+                                              >
+                                                  <Plus size="{10}" strokeWidth="{3}"/>
+                                              </button>
+
+                                              {/* زر تحديد/إلغاء الانفصال للزوجة */}
+                                              {!isUnassigned && (
+                                                  <button
+                                                      type="button"
+                                                      onMouseDown={(e) => e.stopPropagation()}
+                                                      onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          toggleMarriageDivorceStatus(node.id, bundle.wifeId);
+                                                      }}
+                                                      title={isDivorced ? 'إلغاء حالة الانفصال' : 'تحديد الزواج كـ (تم الانفصال)'}
+                                                      className={`w-4 h-4 rounded-full flex items-center justify-center transition ${
+                                                          isDivorced
+                                                              ? 'bg-white text-red-900 hover:bg-red-100'
+                                                              : 'bg-white/80 text-red-700 hover:bg-red-600 hover:text-white'
+                                                      }`}
+                                                  >
+                                                      <X size="{10}" strokeWidth="{3}"/>
+                                                  </button>
+                                              )}
+                                          </div>
+
+                                          {bundle.children.length > 0 ? (
+                                              <ul>
+                                                  {bundle.children.map(child => (
+                                                      <TreeNodeItem childrenMap="{childrenMap}" key="{child.id}" node="{child}"/>
+                                                  ))}
+                                              </ul>
+                                          ) : (
+                                              <div className="text-[10px] text-gray-400 bg-gray-50 px-2.5 py-1 rounded-lg border border-dashed border-gray-200 mt-1">
+                                                  لا يوجد أبناء بعد
+                                              </div>
+                                          )}
+                                      </li>
+                                  );
+                              })}
                           </ul>
+                      ) : (
+                          /* الحالة 2: عرض الأبناء الاعتيادي عندما لا توجد زوجة مرتبطة بعد */
+                          allChildren.length > 0 && (
+                              <ul>
+                                  {allChildren.map(child => (
+                                      <TreeNodeItem childrenMap="{childrenMap}" key="{child.id}" node="{child}"/>
+                                  ))}
+                              </ul>
+                          )
                       )}
                   </li>
               );
           };
 
-          // --- مكون عرض المشجرة الهرمية (تفتح المشجرة الرئيسية مباشرة + تبويبات فرعية للمجلدات) ---
+          // --- مكون عرض المشجرة الهرمية ---
           const renderTreeView = () => {
               const treeMembers = activeTreeSubTab === 'ALL'
                   ? filteredCards
@@ -1345,7 +1839,7 @@
                       <div className="flex flex-wrap items-center justify-between gap-4 mb-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
                           <div className="flex items-center gap-3">
                               <div className="bg-indigo-100 text-indigo-700 p-2.5 rounded-xl">
-                                  <GitFork size={22} />
+                                  <GitFork size="{22}"/>
                               </div>
                               <div>
                                   <h2 className="text-lg sm:text-xl font-black text-gray-800">
@@ -1366,7 +1860,7 @@
                                       className="p-2 hover:bg-white rounded-lg text-gray-600 transition"
                                       title="تصغير"
                                   >
-                                      <ZoomOut size={16} />
+                                      <ZoomOut size="{16}"/>
                                   </button>
                                   <span className="px-2 text-xs font-bold text-gray-600">{Math.round(treeZoom * 100)}%</span>
                                   <button
@@ -1374,7 +1868,7 @@
                                       className="p-2 hover:bg-white rounded-lg text-gray-600 transition"
                                       title="تكبير"
                                   >
-                                      <ZoomIn size={16} />
+                                      <ZoomIn size="{16}"/>
                                   </button>
                               </div>
 
@@ -1382,14 +1876,14 @@
                                   onClick={() => startQuiz(treeMembers)}
                                   className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl hover:bg-emerald-700 transition font-bold text-sm"
                               >
-                                  <Play size={16} fill="currentColor" /> اختبار المعروض
+                                  <Play fill="currentColor" size="{16}"/> اختبار المعروض
                               </button>
 
                               <button
                                   onClick={() => setShowNewTreeModal(true)}
                                   className="flex items-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-4 py-2 rounded-xl transition font-bold text-sm"
                               >
-                                  <Plus size={16} /> إضافة فرع/مجلد جديد
+                                  <Plus size="{16}"/> إضافة فرع/مجلد جديد
                               </button>
                           </div>
                       </div>
@@ -1404,7 +1898,7 @@
                                       : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                               }`}
                           >
-                              <Users size={16} /> الكل (المشجرة الرئيسية)
+                              <Users size="{16}"/> الكل (المشجرة الرئيسية)
                               <span className={`text-xs px-2 py-0.5 rounded-full ${activeTreeSubTab === 'ALL' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'}`}>
                                   {filteredCards.length}
                               </span>
@@ -1423,7 +1917,7 @@
                                               : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                                       }`}
                                   >
-                                      <Folder size={15} /> {tag}
+                                      <Folder size="{15}"/> {tag}
                                       <span className={`text-xs px-2 py-0.5 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'}`}>
                                           {count}
                                       </span>
@@ -1432,15 +1926,70 @@
                           })}
                       </div>
 
-                      {/* لوحة رسم الشجرة الهرمية من الأعلى للأسفل */}
-                      <div className="bg-white rounded-3xl border border-gray-200 shadow-inner p-6 sm:p-10 overflow-x-auto custom-scrollbar min-h-[500px] flex justify-center items-start">
+                      {/* لوحة رسم الشجرة الهرمية مع طبقة SVG لخطوط الربط الوردية والحمراء الغامقة للأمهات */}
+                      <div
+                          ref={treeContainerRef}
+                          onScroll={recomputeMotherConnectorLines}
+                          className="relative bg-white rounded-3xl border border-gray-200 shadow-inner p-6 sm:p-10 overflow-x-auto custom-scrollbar min-h-[520px] flex justify-center items-start select-none"
+                      >
+                          {/* طبقة خطوط الربط التفاعلية بين الأمهات وخطوط الأبناء */}
+                          <svg
+                              className="absolute inset-0 w-full h-full pointer-events-none z-20"
+                              style={{ minWidth: '100%', minHeight: '100%' }}
+                          >
+                              {connectorLines.map(line => {
+                                  const midX = (line.x1 + line.x2) / 2;
+                                  const midY = (line.y1 + line.y2) / 2;
+                                  const strokeColor = line.isDivorced ? '#991b1b' : '#ec4899';
+                                  const pathD = `M ${line.x1} ${line.y1} C ${line.x1} ${midY}, ${line.x2} ${midY}, ${line.x2} ${line.y2}`;
+
+                                  return (
+                                      <g key={line.key}>
+                                          <path
+                                              d={pathD}
+                                              fill="none"
+                                              stroke={strokeColor}
+                                              strokeWidth={line.isDivorced ? "3" : "2.5"}
+                                              strokeDasharray={line.isDivorced ? "6 4" : "none"}
+                                              opacity="0.9"
+                                          />
+                                          <circle cx={line.x1} cy={line.y1} r="4.5" fill={strokeColor} />
+                                          <circle cx={line.x2} cy={line.y2} r="4.5" fill={strokeColor} />
+
+                                          {/* علامة X في منتصف الخط عند تحديد الزواج كـ (تم الانفصال) */}
+                                          {line.isDivorced && (
+                                              <g transform={`translate(${midX}, ${midY})`}>
+                                                  <circle r="11" fill="#7f1d1d" stroke="#ffffff" strokeWidth="2" />
+                                                  <line x1="-5" y1="-5" x2="5" y2="5" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" />
+                                                  <line x1="5" y1="-5" x2="-5" y2="5" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" />
+                                              </g>
+                                          )}
+                                      </g>
+                                  );
+                              })}
+
+                              {/* خط السحب المؤقت أثناء سحب المستخدم للخط نحو بطاقة الأم */}
+                              {draggingLine && (
+                                  <g>
+                                      <path
+                                          d={`M ${draggingLine.startX} ${draggingLine.startY} L ${draggingLine.currentX} ${draggingLine.currentY}`}
+                                          fill="none"
+                                          stroke="#db2777"
+                                          strokeWidth="3"
+                                          strokeDasharray="6 4"
+                                      />
+                                      <circle cx={draggingLine.startX} cy={draggingLine.startY} r="5" fill="#db2777" />
+                                      <circle cx={draggingLine.currentX} cy={draggingLine.currentY} r="6" fill="#be185d" />
+                                  </g>
+                              )}
+                          </svg>
+
                           <div
-                              className="tree-wrapper transition-transform origin-top"
+                              className="tree-wrapper transition-transform origin-top relative z-10"
                               style={{ transform: `scale(${treeZoom})` }}
                           >
                               <div className="tree">
                                   <ul>
-                                      {/* العقدة الجذرية العليا الموحدة لجميع أفراد وفروع الشجرة */}
                                       <li>
                                           <div className="flex flex-col items-center">
                                               <div className="bg-gradient-to-l from-indigo-900 via-blue-900 to-indigo-800 text-white px-7 py-3.5 rounded-2xl shadow-lg border-2 border-amber-300/60 flex flex-col items-center">
@@ -1463,19 +2012,14 @@
                                                   title="إضافة فرع مباشر تحت آل السعيدي - آل سعد - بلّسمر"
                                                   className="mt-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm flex items-center gap-1 transition"
                                               >
-                                                  <Plus size={13} strokeWidth={3} /> إضافة جد / فرع
+                                                  <Plus size="{13}" strokeWidth="{3}"/> إضافة جد / فرع
                                               </button>
                                           </div>
 
-                                          {/* تفرع جميع الجذور والأفراد من المرجع الرئيسي إلى الأسفل */}
                                           {roots.length > 0 ? (
                                               <ul>
                                                   {roots.map(rootNode => (
-                                                      <TreeNodeItem
-                                                          key={rootNode.id}
-                                                          node={rootNode}
-                                                          childrenMap={childrenMap}
-                                                      />
+                                                      <TreeNodeItem childrenMap="{childrenMap}" key="{rootNode.id}" node="{rootNode}"/>
                                                   ))}
                                               </ul>
                                           ) : (
@@ -1489,16 +2033,14 @@
                           </div>
                       </div>
 
-                      <div className="mt-4 flex flex-wrap items-center justify-center gap-6 text-xs text-gray-500 bg-white py-3 px-4 rounded-2xl border border-gray-100">
-                          <span className="flex items-center gap-2">
-                              <span className="w-4 h-4 rounded bg-sky-100 border border-sky-300 inline-block"></span> ذكر (مربع أزرق - زي جنوبي وبندقية)
-                          </span>
-                          <span className="flex items-center gap-2">
-                              <span className="w-4 h-4 rounded-full bg-pink-100 border border-pink-300 inline-block"></span> أنثى (دائري وردي - لبس عسيري)
+                      <div className="mt-4 flex flex-wrap items-center justify-center gap-5 text-xs text-gray-600 bg-white py-3 px-4 rounded-2xl border border-gray-100">
+                          <span className="flex items-center gap-1.5">
+                              <span className="w-5 h-5 rounded-full bg-pink-100 border border-pink-300 text-pink-600 inline-flex items-center justify-center"><Heart size="{11}"/></span>
+                              اسحب أيقونة القلب من الأب إلى بطاقة امرأة لربطها كزوجة وأم بخط وردي مستقل لأبنائها
                           </span>
                           <span className="flex items-center gap-1.5">
-                              <span className="w-4 h-4 rounded-full bg-sky-500 text-white inline-flex items-center justify-center"><Plus size={10} /></span>
-                              اضغط زر الإضافة أسفل أي شخص لتفريع ابن/بنت له مباشرة
+                              <span className="w-5 h-5 rounded-full bg-red-900 text-white inline-flex items-center justify-center"><X size="{11}"/></span>
+                              الخط الأحمر الغامق بعلامة X يدل على الانفصال مع إمكانية ارتباط الأم بزوج وأبناء آخرين
                           </span>
                       </div>
                   </div>
@@ -1511,7 +2053,7 @@
               return (
                 <div className="flex flex-col items-center justify-center py-20 px-4 animate-in fade-in">
                   <div className="bg-red-50 text-red-700 p-8 rounded-3xl max-w-2xl text-center border border-red-200 shadow-sm">
-                    <X size={56} className="mx-auto mb-4 text-red-500" strokeWidth={2.5} />
+                    <X className="mx-auto mb-4 text-red-500" size="{56}" strokeWidth="{2.5}"/>
                     <h2 className="text-2xl font-bold mb-4">يوجد خطأ في إعدادات Firebase</h2>
                     {authError && <p className="text-sm">{authError}</p>}
                     {dbError && <p className="text-sm">{dbError}</p>}
@@ -1523,11 +2065,21 @@
             if (loadingData) {
               return (
                 <div className="flex flex-col items-center justify-center py-32 animate-in fade-in">
-                  <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+                  <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4"/>
                   <h2 className="text-xl text-gray-600 font-bold">جاري تحميل البطاقات...</h2>
                 </div>
               );
             }
+
+            // تجهيز البيانات الأسرية للبطاقة المختارة
+            const selectedCardIsFemale = selectedCard ? getEffectiveGender(selectedCard) === 'female' : false;
+            const selectedCardMother = selectedCard?.motherId ? cardsMap.get(selectedCard.motherId) : null;
+            const selectedCardFather = selectedCard?.parentId ? cardsMap.get(selectedCard.parentId) : null;
+            const selectedCardMarriages = selectedCard
+                ? (selectedCardIsFemale ? getWomanMarriages(selectedCard) : getFatherMarriages(selectedCard))
+                : [];
+            const hasMultipleHusbands = selectedCardIsFemale && selectedCardMarriages.length > 1;
+            const hasDivorcedHistory = selectedCardIsFemale && selectedCardMarriages.some(m => m.status === 'divorced');
 
             return (
               <div className="animate-in fade-in duration-300">
@@ -1537,7 +2089,7 @@
                       onClick={() => setView('add')}
                       className="flex items-center gap-2 bg-blue-50 text-blue-600 px-4 py-2 rounded-xl hover:bg-blue-100 transition font-medium w-full sm:w-auto justify-center"
                     >
-                      <Plus size={20} /> إضافة بطاقة
+                      <Plus size="{20}"/> إضافة بطاقة
                     </button>
                     {viewMode !== 'tree' && (
                       <label className="flex items-center cursor-pointer gap-3 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100">
@@ -1557,14 +2109,14 @@
                         onClick={() => startQuiz(folders[activeFolder])}
                         className="flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-3 rounded-xl hover:shadow-lg hover:from-emerald-600 hover:to-teal-700 transition font-bold text-lg w-full sm:w-auto whitespace-nowrap"
                       >
-                        <Play size={24} fill="currentColor" /> الاختبار في ({activeFolder})
+                        <Play fill="currentColor" size="{24}"/> الاختبار في ({activeFolder})
                       </button>
                     )}
                     <button 
                       onClick={() => startQuiz()}
                       className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-3 rounded-xl hover:shadow-lg hover:from-blue-700 hover:to-indigo-700 transition font-bold text-lg w-full sm:w-auto whitespace-nowrap"
                     >
-                      <Play size={24} fill="currentColor" /> بدء الاختبار
+                      <Play fill="currentColor" size="{24}"/> بدء الاختبار
                     </button>
                   </div>
                 </div>
@@ -1572,7 +2124,7 @@
                 <div className="flex flex-col md:flex-row gap-4 items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6">
                   <div className="relative w-full md:w-auto flex-1">
                      <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 focus-within:ring-2 focus-within:ring-blue-500 transition">
-                        <Search size={20} className="text-gray-400 ml-2" />
+                        <Search className="text-gray-400 ml-2" size="{20}"/>
                         <input 
                           type="text"
                           placeholder="ابحث في البطاقات..."
@@ -1587,19 +2139,19 @@
                       onClick={() => { setViewMode('all'); setActiveFolder(null); }}
                       className={`flex-1 md:flex-none px-5 py-2 rounded-lg text-sm font-bold transition flex justify-center items-center gap-2 ${viewMode === 'all' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
                     >
-                      <ImageIcon size={18} /> كل الصور
+                      <ImageIcon size="{18}"/> كل الصور
                     </button>
                     <button
                       onClick={() => { setViewMode('folders'); }}
                       className={`flex-1 md:flex-none px-5 py-2 rounded-lg text-sm font-bold transition flex justify-center items-center gap-2 ${viewMode === 'folders' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-900'}`}
                     >
-                      <Folder size={18} /> مجلدات
+                      <Folder size="{18}"/> مجلدات
                     </button>
                     <button
                       onClick={() => { setViewMode('tree'); setActiveFolder(null); setActiveTreeSubTab('ALL'); }}
                       className={`flex-1 md:flex-none px-5 py-2 rounded-lg text-sm font-bold transition flex justify-center items-center gap-2 ${viewMode === 'tree' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-900'}`}
                     >
-                      <GitFork size={18} /> مشجرة
+                      <GitFork size="{18}"/> مشجرة
                     </button>
                   </div>
                 </div>
@@ -1609,7 +2161,7 @@
                   renderTreeView()
                 ) : cards.length === 0 ? (
                   <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-300">
-                    <ImageIcon className="mx-auto text-gray-300 mb-4" size={64} />
+                    <ImageIcon className="mx-auto text-gray-300 mb-4" size="{64}"/>
                     <h2 className="text-xl text-gray-500 font-medium">لا توجد بطاقات حتى الآن</h2>
                   </div>
                 ) : (
@@ -1625,11 +2177,7 @@
                               className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden border border-gray-100 transform hover:-translate-y-1 flex flex-col"
                             >
                               <div className={`aspect-square w-full overflow-hidden relative p-3 flex items-center justify-center ${isFemale ? 'bg-pink-50/40' : 'bg-sky-50/40'}`}>
-                                <PersonAvatar
-                                  card={{ ...card, gender: isFemale ? 'female' : 'male' }}
-                                  sizeClass="w-full h-full"
-                                  imgClassName="object-contain transition duration-500 group-hover:scale-105"
-                                />
+                                <PersonAvatar 'female' 'male' ...card, : ? card="{{" gender: imgClassName="object-contain transition duration-500 group-hover:scale-105" isFemale sizeClass="w-full h-full" }}/>
                               </div>
                               
                               <div className={`p-4 transition-all duration-300 flex flex-col justify-center flex-grow ${showNames ? 'opacity-100 h-auto' : 'opacity-0 h-0 p-0 overflow-hidden'}`}>
@@ -1657,7 +2205,7 @@
                             className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-300 cursor-pointer transition text-center flex flex-col items-center gap-4 group"
                           >
                             <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:bg-blue-100 transition duration-300">
-                              <Folder size={40} fill="currentColor" className="opacity-80" />
+                              <Folder className="opacity-80" fill="currentColor" size="{40}"/>
                             </div>
                             <div className="w-full">
                               <h3 className="font-bold text-gray-800 truncate" title={folderName}>{folderName}</h3>
@@ -1675,10 +2223,10 @@
                             onClick={() => setActiveFolder(null)}
                             className="flex items-center gap-2 text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 px-4 py-2 rounded-xl transition font-medium"
                           >
-                            <ArrowRight size={18} /> عودة
+                            <ArrowRight size="{18}"/> عودة
                           </button>
                           <h2 className="text-xl font-bold flex items-center gap-2 text-gray-800">
-                            <Folder className="text-blue-500" fill="currentColor" /> {activeFolder}
+                            <Folder className="text-blue-500" fill="currentColor"/> {activeFolder}
                           </h2>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
@@ -1691,11 +2239,7 @@
                                 className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden border border-gray-100 transform hover:-translate-y-1 flex flex-col"
                               >
                                 <div className={`aspect-square w-full overflow-hidden relative p-3 flex items-center justify-center ${isFemale ? 'bg-pink-50/40' : 'bg-sky-50/40'}`}>
-                                  <PersonAvatar
-                                    card={{ ...card, gender: isFemale ? 'female' : 'male' }}
-                                    sizeClass="w-full h-full"
-                                    imgClassName="object-contain transition duration-500 group-hover:scale-105"
-                                  />
+                                  <PersonAvatar 'female' 'male' ...card, : ? card="{{" gender: imgClassName="object-contain transition duration-500 group-hover:scale-105" isFemale sizeClass="w-full h-full" }}/>
                                 </div>
                                 <div className={`p-4 transition-all duration-300 flex flex-col justify-center flex-grow ${showNames ? 'opacity-100 h-auto' : 'opacity-0 h-0 p-0 overflow-hidden'}`}>
                                   <h3 className="font-bold text-gray-800 text-center truncate">{getDisplayFullName(card)}</h3>
@@ -1709,7 +2253,7 @@
                   </>
                 )}
 
-                {/* نافذة تفاصيل البطاقة المكبرة */}
+                {/* نافذة تفاصيل البطاقة المكبرة (مع عرض بيانات الأم والزوجات والأزواج والأولاد وحالة الانفصال) */}
                 {selectedCard && (
                   <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 lg:p-10 animate-in fade-in">
                     <div className="bg-white rounded-[2rem] w-full max-w-2xl p-6 shadow-2xl relative flex flex-col max-h-[90vh] overflow-y-auto">
@@ -1719,20 +2263,20 @@
                             onClick={() => handleEditCard(selectedCard)}
                             className="bg-blue-50 text-blue-600 hover:bg-blue-100 p-3 rounded-xl transition shadow-sm flex items-center gap-2 font-bold"
                           >
-                            <Edit size={20} /> <span className="hidden sm:inline">تعديل</span>
+                            <Edit size="{20}"/> <span className="hidden sm:inline">تعديل</span>
                           </button>
                           <button 
                             onClick={() => setDeleteConfirmCard(selectedCard)}
                             className="bg-red-50 text-red-600 hover:bg-red-100 p-3 rounded-xl transition shadow-sm flex items-center gap-2 font-bold"
                           >
-                            <Trash2 size={20} /> <span className="hidden sm:inline">حذف</span>
+                            <Trash2 size="{20}"/> <span className="hidden sm:inline">حذف</span>
                           </button>
                         </div>
                         <button 
                           onClick={() => setSelectedCard(null)}
                           className="bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 p-3 rounded-xl transition shadow-sm"
                         >
-                          <X size={20} />
+                          <X size="{20}"/>
                         </button>
                       </div>
 
@@ -1751,15 +2295,195 @@
                           </div>
                         )}
                       </div>
+
+                      {/* قسم العلاقات الأسرية (الأم / الزوجات / الأزواج والأولاد وحالة الانفصال) */}
+                      {(selectedCardMother || selectedCardMarriages.length > 0) && (
+                        <div className="mb-4 bg-gradient-to-l from-pink-50/80 via-white to-sky-50/70 border border-pink-200 rounded-2xl p-4 space-y-3 text-right">
+                          {/* إذا كان للشخص أم مسجلة */}
+                          {selectedCardMother && (
+                            <div className="flex items-center justify-between bg-white px-3.5 py-2.5 rounded-xl border border-pink-200 shadow-xs">
+                              <div className="flex items-center gap-2.5">
+                                <span className="bg-pink-100 text-pink-700 p-1.5 rounded-lg"><Heart size="{16}"/></span>
+                                <div>
+                                  <div className="text-[11px] text-pink-600 font-bold">الأم (زوجة الأب):</div>
+                                  <div className="text-sm font-black text-gray-800">{getDisplayFullName(selectedCardMother)}</div>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => { setSelectedCard(selectedCardMother); setGalleryShowInfo(false); }}
+                                className="text-xs bg-pink-50 hover:bg-pink-100 text-pink-700 font-bold px-3 py-1.5 rounded-lg transition"
+                              >
+                                عرض بطاقتها
+                              </button>
+                            </div>
+                          )}
+
+                          {/* تنبيه في ملف المرأة إذا ارتبطت بأكثر من زوج أو كان هناك زواج سابق منفصل */}
+                          {selectedCardIsFemale && (hasMultipleHusbands || hasDivorcedHistory) && (
+                            <div className="bg-amber-50 border border-amber-300 text-amber-900 px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-start gap-2">
+                              <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size="{16}"/>
+                              <div>
+                                {hasMultipleHusbands
+                                  ? 'تنبيه في الملف: هذه الأم مرتبطة بأكثر من زوج ولديها أبناء من أكثر من زواج (بعد الانفصال السابق).'
+                                  : 'تنبيه في الملف: يوجد زواج سابق محدد كـ (تم الانفصال)، ويمكن ربطها بزوج وأبناء آخرين في المشجرة.'}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* إذا كانت البطاقة لامرأة: عرض أزواجها وأولادها من كل زوج */}
+                          {selectedCardIsFemale && selectedCardMarriages.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="text-xs font-black text-pink-800 flex items-center gap-1.5">
+                                <Users size="{14}"/> الأزواج والأولاد ({selectedCardMarriages.length}):
+                              </div>
+                              {selectedCardMarriages.map((m, idx) => {
+                                const isDiv = m.status === 'divorced';
+                                return (
+                                  <div
+                                    key={m.husband.id}
+                                    className={`p-3 rounded-xl border ${
+                                      isDiv
+                                        ? 'bg-red-50/70 border-red-300'
+                                        : 'bg-white border-pink-200'
+                                    }`}
+                                  >
+                                    <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold text-gray-500">الزوج {selectedCardMarriages.length > 1 ? `#${idx + 1}` : ''}:</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => { setSelectedCard(m.husband); setGalleryShowInfo(false); }}
+                                          className="text-sm font-black text-sky-900 hover:underline"
+                                        >
+                                          {getDisplayFullName(m.husband)}
+                                        </button>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleMarriageDivorceStatus(m.husband.id, selectedCard.id)}
+                                        className={`text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 transition ${
+                                          isDiv
+                                            ? 'bg-red-800 text-white hover:bg-red-900'
+                                            : 'bg-emerald-100 text-emerald-800 hover:bg-red-100 hover:text-red-800'
+                                        }`}
+                                      >
+                                        {isDiv ? <><X size="{12}"/> تم الانفصال (اضغط لإعادة الوصل)</> : <><Check size="{12}"/> متصل (اضغط لتحديد الانفصال)</>}
+                                      </button>
+                                    </div>
+
+                                    <div className="text-xs text-gray-600">
+                                      <span className="font-bold">الأولاد منه: </span>
+                                      {m.children.length > 0 ? (
+                                        <span className="inline-flex flex-wrap gap-1 mt-1">
+                                          {m.children.map(kid => (
+                                            <button
+                                              key={kid.id}
+                                              type="button"
+                                              onClick={() => { setSelectedCard(kid); setGalleryShowInfo(false); }}
+                                              className="bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-2 py-0.5 rounded-full font-bold text-[11px]"
+                                            >
+                                              {kid.firstName || parseNameParts(kid.name)[0]}
+                                            </button>
+                                          ))}
+                                        </span>
+                                      ) : (
+                                        <span className="text-gray-400">لا يوجد أولاد مسجلون بعد</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* إذا كانت البطاقة لأب: عرض زوجاته وأبناء كل زوجة */}
+                          {!selectedCardIsFemale && selectedCardMarriages.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="text-xs font-black text-sky-900 flex items-center gap-1.5">
+                                <Heart className="text-pink-600" size="{14}"/> الزوجات والأبناء ({selectedCardMarriages.length}):
+                              </div>
+                              {selectedCardMarriages.map((m, idx) => {
+                                const wife = cardsMap.get(m.wifeId);
+                                if (!wife) return null;
+                                const isDiv = m.status === 'divorced';
+                                const wifeKids = cards.filter(c => c.parentId === selectedCard.id && c.motherId === wife.id);
+                                return (
+                                  <div
+                                    key={wife.id}
+                                    className={`p-3 rounded-xl border ${
+                                      isDiv
+                                        ? 'bg-red-50/70 border-red-300'
+                                        : 'bg-white border-pink-200'
+                                    }`}
+                                  >
+                                    <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold text-pink-600">الزوجة {selectedCardMarriages.length > 1 ? `#${idx + 1}` : ''}:</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => { setSelectedCard(wife); setGalleryShowInfo(false); }}
+                                          className="text-sm font-black text-pink-900 hover:underline"
+                                        >
+                                          {getDisplayFullName(wife)}
+                                        </button>
+                                      </div>
+
+                                      <div className="flex items-center gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleMarriageDivorceStatus(selectedCard.id, wife.id)}
+                                          className={`text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 transition ${
+                                            isDiv
+                                              ? 'bg-red-800 text-white hover:bg-red-900'
+                                              : 'bg-emerald-100 text-emerald-800 hover:bg-red-100 hover:text-red-800'
+                                          }`}
+                                        >
+                                          {isDiv ? <><X size="{12}"/> تم الانفصال</> : <><Check size="{12}"/> متصل</>}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => unlinkMotherFromFather(selectedCard.id, wife.id)}
+                                          title="فك الارتباط"
+                                          className="text-gray-400 hover:text-red-600 p-1"
+                                        >
+                                          <Trash2 size="{13}"/>
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <div className="text-xs text-gray-600">
+                                      <span className="font-bold">الأبناء منها: </span>
+                                      {wifeKids.length > 0 ? (
+                                        <span className="inline-flex flex-wrap gap-1 mt-1">
+                                          {wifeKids.map(kid => (
+                                            <button
+                                              key={kid.id}
+                                              type="button"
+                                              onClick={() => { setSelectedCard(kid); setGalleryShowInfo(false); }}
+                                              className="bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-2 py-0.5 rounded-full font-bold text-[11px]"
+                                            >
+                                              {kid.firstName || parseNameParts(kid.name)[0]}
+                                            </button>
+                                          ))}
+                                        </span>
+                                      ) : (
+                                        <span className="text-gray-400">لا يوجد أبناء مسجلون بعد</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       
-                      <div className="w-full h-[45vh] min-h-[340px] rounded-3xl overflow-hidden bg-gray-50 relative border border-gray-100 mb-6 flex items-center justify-center p-4">
+                      <div className="w-full h-[40vh] min-h-[300px] rounded-3xl overflow-hidden bg-gray-50 relative border border-gray-100 mb-6 flex items-center justify-center p-4">
                         {!galleryShowInfo ? (
                           <div className="w-full h-full flex items-center justify-center animate-in fade-in zoom-in duration-300">
-                            <PersonAvatar
-                              card={{ ...selectedCard, gender: getEffectiveGender(selectedCard) }}
-                              sizeClass="w-72 h-72 sm:w-80 sm:h-80"
-                              imgClassName="object-contain"
-                            />
+                            <PersonAvatar ...selectedCard, card="{{" gender: getEffectiveGender(selectedCard) imgClassName="object-contain" sizeClass="w-64 h-64 sm:w-72 sm:h-72" }}/>
                           </div>
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300 overflow-y-auto">
@@ -1773,17 +2497,17 @@
                         onClick={() => setGalleryShowInfo(!galleryShowInfo)}
                         className="w-full bg-blue-100 text-blue-700 border-2 border-transparent hover:border-blue-200 hover:bg-blue-200 py-4 rounded-2xl transition-all duration-300 font-bold text-xl flex items-center justify-center gap-3 shadow-sm active:scale-95 mb-6"
                       >
-                        <RefreshCw size={24} /> {galleryShowInfo ? 'إرجاع الصورة' : 'قلب البطاقة (عرض التفاصيل)'}
+                        <RefreshCw size="{24}"/> {galleryShowInfo ? 'إرجاع الصورة' : 'قلب البطاقة (عرض التفاصيل)'}
                       </button>
 
                       <div className="flex w-full gap-4">
                         <div className="flex-1 bg-green-50 border border-green-100 rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm">
                           <span className="text-3xl font-black text-green-600 mb-1">{selectedCard.correctCount || 0}</span>
-                          <span className="text-green-800 text-sm font-bold flex items-center gap-1"><Check size={16}/> إجابة صحيحة</span>
+                          <span className="text-green-800 text-sm font-bold flex items-center gap-1"><Check size="{16}"/> إجابة صحيحة</span>
                         </div>
                         <div className="flex-1 bg-red-50 border border-red-100 rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm">
                           <span className="text-3xl font-black text-red-600 mb-1">{selectedCard.wrongCount || 0}</span>
-                          <span className="text-red-800 text-sm font-bold flex items-center gap-1"><X size={16}/> إجابة خاطئة</span>
+                          <span className="text-red-800 text-sm font-bold flex items-center gap-1"><X size="{16}"/> إجابة خاطئة</span>
                         </div>
                       </div>
                     </div>
@@ -1795,7 +2519,7 @@
                   <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in">
                     <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl text-center">
                       <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Trash2 size={32} />
+                        <Trash2 size="{32}"/>
                       </div>
                       <h3 className="text-xl font-black text-gray-800 mb-2">حذف البطاقة؟</h3>
                       <p className="text-sm text-gray-600 mb-6">
@@ -1819,19 +2543,19 @@
                   </div>
                 )}
 
-                {/* نافذة إنشاء فرع/مجلد جديد تحت آل السعيدي - آل سعد - بلّسمر */}
+                {/* نافذة إنشاء فرع/مجلد جديد */}
                 {showNewTreeModal && (
                   <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
                     <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
                       <div className="flex items-center justify-between mb-4">
                         <div>
                           <h3 className="text-xl font-black text-gray-800 flex items-center gap-2">
-                            <GitFork className="text-indigo-600" /> إضافة فرع / مجلد جديد
+                            <GitFork className="text-indigo-600"/> إضافة فرع / مجلد جديد
                           </h3>
                           <p className="text-xs text-indigo-600 font-bold mt-0.5">يتبع لـ: {CLAN_ROOT_TITLE}</p>
                         </div>
                         <button onClick={() => setShowNewTreeModal(false)} className="text-gray-400 hover:text-gray-700 p-2 rounded-xl bg-gray-100">
-                          <X size={18} />
+                          <X size="{18}"/>
                         </button>
                       </div>
                       <form onSubmit={handleCreateNewTree} className="space-y-4">
@@ -1892,28 +2616,56 @@
                   </div>
                 )}
 
-                {/* نافذة إضافة فرع سريع تحت شخص في المشجرة (الاسم فقط + الجنس) */}
+                {/* نافذة إضافة فرع سريع تحت شخص أو زوجة محددة في المشجرة */}
                 {quickBranchParent && (
                   <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
                     <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-black text-gray-800 flex items-center gap-2">
-                          <Plus className="text-blue-600" /> إضافة فرع جديد
+                          <Plus className="text-blue-600"/> إضافة فرع جديد
                         </h3>
-                        <button onClick={() => setQuickBranchParent(null)} className="text-gray-400 hover:text-gray-700 p-2 rounded-xl bg-gray-100">
-                          <X size={18} />
+                        <button onClick={() => { setQuickBranchParent(null); setQuickBranchMotherId(null); }} className="text-gray-400 hover:text-gray-700 p-2 rounded-xl bg-gray-100">
+                          <X size="{18}"/>
                         </button>
                       </div>
 
                       <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200 mb-4 flex items-center gap-3">
-                        <PersonAvatar card={quickBranchParent} sizeClass="w-12 h-12" />
+                        <PersonAvatar card="{quickBranchParent}" sizeClass="w-12 h-12"/>
                         <div>
                           <div className="text-xs text-gray-500">إضافة ابن / بنت لـ:</div>
                           <div className="font-bold text-gray-800 text-sm">{getDisplayFullName(quickBranchParent)}</div>
+                          {quickBranchMotherId && cardsMap.get(quickBranchMotherId) && (
+                            <div className="text-xs font-bold text-pink-700 mt-0.5">
+                              الأم: {cardsMap.get(quickBranchMotherId).firstName || parseNameParts(cardsMap.get(quickBranchMotherId).name)[0]}
+                            </div>
+                          )}
                         </div>
                       </div>
 
                       <form onSubmit={handleAddQuickBranch} className="space-y-4">
+                        {/* اختيار الزوجة (الأم) إذا كان للأب زوجات مسجلات */}
+                        {getEffectiveGender(quickBranchParent) === 'male' && getFatherMarriages(quickBranchParent).length > 0 && (
+                          <div>
+                            <label className="block text-sm font-bold text-pink-800 mb-1.5">الأم (الزوجة)</label>
+                            <select
+                              value={quickBranchMotherId || ''}
+                              onChange={(e) => setQuickBranchMotherId(e.target.value || null)}
+                              className="w-full border border-pink-200 rounded-xl px-4 py-2.5 bg-pink-50/40 focus:bg-white focus:ring-2 focus:ring-pink-400 outline-none text-sm font-bold"
+                            >
+                              <option value="">-- خط مستقل / بدون تحديد أم --</option>
+                              {getFatherMarriages(quickBranchParent).map(m => {
+                                const w = cardsMap.get(m.wifeId);
+                                if (!w) return null;
+                                return (
+                                  <option key={w.id} value={w.id}>
+                                    {w.firstName || parseNameParts(w.name)[0]} {m.status === 'divorced' ? '(منفصلان)' : ''}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+                        )}
+
                         <div>
                           <label className="block text-sm font-bold text-gray-700 mb-1.5">الاسم الأول للفرع (أو اسم متبوع بـ بن / بنت)</label>
                           <input
@@ -1944,7 +2696,7 @@
                                   : 'border-gray-200 text-gray-600'
                               }`}
                             >
-                              <div className="w-7 h-7 rounded-lg overflow-hidden border border-sky-300"><MaleDefaultAvatar /></div>
+                              <div className="w-7 h-7 rounded-lg overflow-hidden border border-sky-300"><MaleDefaultAvatar/></div>
                               ذكر (ابن)
                             </button>
                             <button
@@ -1956,22 +2708,18 @@
                                   : 'border-gray-200 text-gray-600'
                               }`}
                             >
-                              <div className="w-7 h-7 rounded-full overflow-hidden border border-pink-300"><AsiriWomanAvatar /></div>
+                              <div className="w-7 h-7 rounded-full overflow-hidden border border-pink-300"><AsiriWomanAvatar/></div>
                               أنثى (بنت)
                             </button>
                           </div>
                         </div>
-
-                        <p className="text-xs text-gray-400">
-                          * سيتم إنشاء بطاقته بباقي البيانات فارغة ويمكنك تعديلها وإضافة صورته لاحقاً عند الضغط عليه.
-                        </p>
 
                         <button
                           type="submit"
                           disabled={isSavingBranch}
                           className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 transition shadow-md flex items-center justify-center gap-2 disabled:opacity-60"
                         >
-                          {isSavingBranch && <Loader2 className="animate-spin" size={18} />}
+                          {isSavingBranch && <Loader2 className="animate-spin" size="{18}"/>}
                           إضافة للمشجرة
                         </button>
                       </form>
@@ -1988,7 +2736,7 @@
               return (
                 <div className="max-w-xl mx-auto text-center py-20 bg-white rounded-3xl shadow-sm border border-gray-100 animate-in zoom-in mt-8">
                   <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <Check size={48} strokeWidth={3} />
+                    <Check size="{48}" strokeWidth="{3}"/>
                   </div>
                   <h2 className="text-3xl font-bold text-gray-800 mb-4">انتهى الاختبار!</h2>
                   <button 
@@ -2002,6 +2750,7 @@
             }
 
             const currentCard = quizQueue[0];
+            const currentMother = currentCard?.motherId ? cardsMap.get(currentCard.motherId) : null;
 
             return (
               <div className="max-w-2xl mx-auto flex flex-col items-center animate-in slide-in-from-bottom-8 mt-4">
@@ -2014,15 +2763,16 @@
                   <div className="w-full h-[50vh] min-h-[380px] rounded-3xl overflow-hidden bg-gray-50 relative border border-gray-100 flex items-center justify-center p-4">
                     {!quizShowInfo ? (
                       <div className="w-full h-full flex items-center justify-center animate-in fade-in zoom-in duration-300">
-                        <PersonAvatar
-                          card={{ ...currentCard, gender: getEffectiveGender(currentCard) }}
-                          sizeClass="w-72 h-72 sm:w-80 sm:h-80"
-                          imgClassName="object-contain"
-                        />
+                        <PersonAvatar ...currentCard, card="{{" gender: getEffectiveGender(currentCard) imgClassName="object-contain" sizeClass="w-72 h-72 sm:w-80 sm:h-80" }}/>
                       </div>
                     ) : (
                       <div key={`info-${currentCard.id}`} className="w-full h-full flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300 overflow-y-auto">
-                        <h3 className="text-2xl sm:text-3xl font-black text-gray-800 mb-4 leading-relaxed">{getDisplayFullName(currentCard)}</h3>
+                        <h3 className="text-2xl sm:text-3xl font-black text-gray-800 mb-3 leading-relaxed">{getDisplayFullName(currentCard)}</h3>
+                        {currentMother && (
+                          <div className="bg-pink-50 text-pink-800 border border-pink-200 px-4 py-1.5 rounded-full text-sm font-bold mb-3">
+                            الأم: {getDisplayFullName(currentMother)}
+                          </div>
+                        )}
                         <p className="text-gray-600 text-lg leading-relaxed mb-4">{currentCard.description || 'لا يوجد وصف'}</p>
                       </div>
                     )}
@@ -2030,7 +2780,7 @@
                   
                   {!quizShowInfo && (
                     <div className="absolute -bottom-5 left-1/2 transform -translate-x-1/2 bg-white px-6 py-2 rounded-full shadow-md border border-gray-100 font-bold text-gray-400 text-sm tracking-widest flex items-center gap-2">
-                      من هذا؟ <User size={16} />
+                      من هذا؟ <User size="{16}"/>
                     </div>
                   )}
                 </div>
@@ -2040,7 +2790,7 @@
                     onClick={() => setQuizShowInfo(!quizShowInfo)}
                     className="w-full bg-blue-100 text-blue-700 border-2 border-transparent hover:border-blue-200 hover:bg-blue-200 py-4 rounded-2xl transition-all duration-300 font-bold text-xl flex items-center justify-center gap-3 shadow-sm active:scale-95 animate-in fade-in"
                   >
-                    <RefreshCw size={24} /> {quizShowInfo ? 'إرجاع الصورة' : 'قلب البطاقة (عرض الإجابة)'}
+                    <RefreshCw size="{24}"/> {quizShowInfo ? 'إرجاع الصورة' : 'قلب البطاقة (عرض الإجابة)'}
                   </button>
 
                   <div className="flex w-full gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300 mt-2">
@@ -2048,13 +2798,13 @@
                       onClick={handleWrong}
                       className="flex-1 bg-red-50 text-red-600 border-2 border-red-200 hover:bg-red-600 hover:text-white py-5 rounded-2xl transition-all duration-300 font-bold text-2xl flex items-center justify-center gap-3 shadow-sm hover:shadow-red-200/50 hover:shadow-xl active:scale-95"
                     >
-                      <X size={32} strokeWidth={3} /> خطأ
+                      <X size="{32}" strokeWidth="{3}"/> خطأ
                     </button>
                     <button 
                       onClick={handleCorrect}
                       className="flex-1 bg-green-50 text-green-600 border-2 border-green-200 hover:bg-green-600 hover:text-white py-5 rounded-2xl transition-all duration-300 font-bold text-2xl flex items-center justify-center gap-3 shadow-sm hover:shadow-green-200/50 hover:shadow-xl active:scale-95"
                     >
-                      <Check size={32} strokeWidth={3} /> صح
+                      <Check size="{32}" strokeWidth="{3}"/> صح
                     </button>
                   </div>
                 </div>
@@ -2078,7 +2828,7 @@
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
                   <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('gallery')}>
                     <div className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white p-2.5 rounded-xl shadow-md">
-                      <ImageIcon size={28} />
+                      <ImageIcon size="{28}"/>
                     </div>
                     <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-l from-blue-800 to-indigo-600 tracking-tight">
                       اختبار الذاكرة
@@ -2088,8 +2838,8 @@
               </header>
               <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {view === 'gallery' && renderGallery()}
-                {view === 'add' && <CardFormView onSave={handleSaveCard} />}
-                {view === 'edit' && <CardFormView initialData={editingCard} onSave={handleSaveCard} />}
+                {view === 'add' && <CardFormView onSave="{handleSaveCard}"/>}
+                {view === 'edit' && <CardFormView initialData="{editingCard}" onSave="{handleSaveCard}"/>}
                 {view === 'quiz' && renderQuiz()}
               </main>
             </div>
@@ -2098,7 +2848,7 @@
 
         // تشغيل التطبيق في الصفحة
         const root = createRoot(document.getElementById('root'));
-        root.render(<App />);
+        root.render(<App/>);
     </script>
 </body>
 </html>
