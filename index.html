@@ -128,6 +128,7 @@
             background: #94a3b8;
         }
     </style>
+<base target="_blank">
 </head>
 <body class="bg-[#f8fafc] text-gray-800">
 
@@ -284,11 +285,28 @@
                 .map(s => s.trim())
                 .filter(Boolean);
 
+            // دمج "آل" مع الاسم الذي يليها كوحدة واحدة (جزء لا يتجزأ مما بعدها)
+            // مع فصلها فصلاً كاملاً عن الاسم الذي يسبقها
+            const groupAlTokens = (segment) => {
+                const tokens = segment.split(/\s+/).filter(Boolean);
+                const parts = [];
+                for (let i = 0; i < tokens.length; i++) {
+                    if (tokens[i] === 'آل' && tokens[i + 1]) {
+                        // "آل" جزء لا يتجزأ مما يليها، وفاصل عمّا قبلها
+                        parts.push(`${tokens[i]} ${tokens[i + 1]}`);
+                        i++;
+                    } else {
+                        parts.push(tokens[i]);
+                    }
+                }
+                return parts;
+            };
+
             if (splitByConnectors.length > 1) {
-                return splitByConnectors;
+                return splitByConnectors.flatMap(groupAlTokens);
             }
 
-            const parts = withoutClan.split(/\s+/).filter(Boolean);
+            const parts = groupAlTokens(withoutClan);
             return parts.length > 0 ? parts : [''];
         };
 
@@ -338,6 +356,7 @@
           const [quickBranchGender, setQuickBranchGender] = useState('male');
           const [isSavingBranch, setIsSavingBranch] = useState(false);
           const [treeZoom, setTreeZoom] = useState(1);
+          const [treeSize, setTreeSize] = useState({ w: 0, h: 0 });
 
           const [draggingLine, setDraggingLine] = useState(null); 
           const [hoveredWomanId, setHoveredWomanId] = useState(null);
@@ -652,8 +671,18 @@
               }
               const container = treeContainerRef.current;
               const containerRect = container.getBoundingClientRect();
-              const scrollLeft = container.scrollLeft;
-              const scrollTop = container.scrollTop;
+              setTreeSize({
+                  w: Math.max(container.scrollWidth, container.clientWidth),
+                  h: Math.max(container.scrollHeight, container.clientHeight)
+              });
+              // الحاوية باتجاه LTR داخلياً حتى تكون scrollLeft موجبة وثابتة في جميع المتصفحات
+              const scrollLeft = Math.max(0, container.scrollLeft);
+              const scrollTop = Math.max(0, container.scrollTop);
+              const z = treeZoom || 1;
+
+              // تحويل إحداثيات النافذة (التي تتأثر بالزوم) إلى إحداثيات المحتوى غير المكبّرة
+              const toContentX = (clientX) => ((clientX - containerRect.left) / z) + scrollLeft;
+              const toContentY = (clientY) => ((clientY - containerRect.top) / z) + scrollTop;
 
               const lines = [];
 
@@ -669,10 +698,10 @@
                   const wRect = womanEl.getBoundingClientRect();
 
                   // حساب منتصف كل عنصر في إحداثيات المحتوى الكاملة داخل الحاوية
-                  const wCenterX = (wRect.left - containerRect.left) + scrollLeft + wRect.width / 2;
-                  const wCenterY = (wRect.top - containerRect.top) + scrollTop + wRect.height / 2;
-                  const aCenterX = (aRect.left - containerRect.left) + scrollLeft + aRect.width / 2;
-                  const aCenterY = (aRect.top - containerRect.top) + scrollTop + aRect.height / 2;
+                  const wCenterX = toContentX(wRect.left + wRect.width / 2);
+                  const wCenterY = toContentY(wRect.top + wRect.height / 2);
+                  const aCenterX = toContentX(aRect.left + aRect.width / 2);
+                  const aCenterY = toContentY(aRect.top + aRect.height / 2);
 
                   // اختيار نقطة الانطلاق من الحافة الأقرب لبطاقة الأم نحو الشارة
                   const dx = aCenterX - wCenterX;
@@ -681,25 +710,17 @@
                   let x1 = wCenterX;
                   let y1 = wCenterY;
                   if (Math.abs(dx) > Math.abs(dy)) {
-                      x1 = dx >= 0
-                          ? (wRect.right - containerRect.left) + scrollLeft
-                          : (wRect.left - containerRect.left) + scrollLeft;
+                      x1 = toContentX(dx >= 0 ? wRect.right : wRect.left);
                   } else {
-                      y1 = dy >= 0
-                          ? (wRect.bottom - containerRect.top) + scrollTop
-                          : (wRect.top - containerRect.top) + scrollTop;
+                      y1 = toContentY(dy >= 0 ? wRect.bottom : wRect.top);
                   }
 
                   let x2 = aCenterX;
                   let y2 = aCenterY;
                   if (Math.abs(dx) > Math.abs(dy)) {
-                      x2 = dx >= 0
-                          ? (aRect.left - containerRect.left) + scrollLeft
-                          : (aRect.right - containerRect.left) + scrollLeft;
+                      x2 = toContentX(dx >= 0 ? aRect.left : aRect.right);
                   } else {
-                      y2 = dy >= 0
-                          ? (aRect.top - containerRect.top) + scrollTop
-                          : (aRect.bottom - containerRect.top) + scrollTop;
+                      y2 = toContentY(dy >= 0 ? aRect.top : aRect.bottom);
                   }
 
                   const father = cardsMap.get(fatherId);
@@ -719,7 +740,7 @@
               });
 
               setConnectorLines(lines);
-          }, [viewMode, cards, cardsMap, getFatherMarriages]);
+          }, [viewMode, cards, cardsMap, getFatherMarriages, treeZoom]);
 
           useEffect(() => {
               const timer1 = setTimeout(recomputeMotherConnectorLines, 60);
@@ -740,8 +761,9 @@
                   const clientX = e.touches ? e.touches[0].clientX : e.clientX;
                   const clientY = e.touches ? e.touches[0].clientY : e.clientY;
                   const rect = treeContainerRef.current.getBoundingClientRect();
-                  const x = (clientX - rect.left) + treeContainerRef.current.scrollLeft;
-                  const y = (clientY - rect.top) + treeContainerRef.current.scrollTop;
+                  const z = treeZoom || 1;
+                  const x = ((clientX - rect.left) / z) + Math.max(0, treeContainerRef.current.scrollLeft);
+                  const y = ((clientY - rect.top) / z) + Math.max(0, treeContainerRef.current.scrollTop);
 
                   setDraggingLine(prev => prev ? { ...prev, currentX: x, currentY: y } : null);
 
@@ -784,7 +806,7 @@
                   window.removeEventListener('touchmove', handlePointerMove);
                   window.removeEventListener('touchend', handlePointerUp);
               };
-          }, [draggingLine, hoveredWomanId]);
+          }, [draggingLine, hoveredWomanId, treeZoom]);
 
           const startDraggingFromAnchor = (e, fatherId, sourceMotherId) => {
               e.stopPropagation();
@@ -793,8 +815,9 @@
               const clientX = e.touches ? e.touches[0].clientX : e.clientX;
               const clientY = e.touches ? e.touches[0].clientY : e.clientY;
               const rect = treeContainerRef.current.getBoundingClientRect();
-              const x = (clientX - rect.left) + treeContainerRef.current.scrollLeft;
-              const y = (clientY - rect.top) + treeContainerRef.current.scrollTop;
+              const z = treeZoom || 1;
+              const x = ((clientX - rect.left) / z) + Math.max(0, treeContainerRef.current.scrollLeft);
+              const y = ((clientY - rect.top) / z) + Math.max(0, treeContainerRef.current.scrollTop);
 
               setDraggingLine({
                   fatherId,
@@ -1681,10 +1704,11 @@
 
               const wifeBundles = useMemo(() => {
                   if (isFemale) return [];
+                  const nodeMarriages = getFatherMarriages(node);
                   const bundles = [];
                   const assignedChildIds = new Set();
 
-                  marriages.forEach(m => {
+                  nodeMarriages.forEach(m => {
                       const wifeCard = cardsMap.get(m.wifeId);
                       if (!wifeCard) return;
                       const kids = allChildren.filter(c => c.motherId === m.wifeId);
@@ -1707,7 +1731,7 @@
                       });
                   }
                   return bundles;
-              }, [isFemale, marriages, allChildren, cardsMap]);
+              }, [isFemale, node.id, cards, cardsMap, allChildren]);
 
               return (
                   <li>
@@ -1772,7 +1796,7 @@
                                       onMouseDown={(e) => startDraggingFromAnchor(e, node.id, 'UNASSIGNED')}
                                       onTouchStart={(e) => startDraggingFromAnchor(e, node.id, 'UNASSIGNED')}
                                       title="اسحب هذا المقبض إلى بطاقة امرأة لربطها كزوجة وأم لأبنائه (أو لإضافة زوجة إضافية بخط مستقل)"
-                                      className="w-6 h-6 rounded-full bg-pink-100 hover:bg-pink-500 text-pink-600 hover:text-white border border-pink-300 flex items-center justify-center shadow-sm cursor-grab active:cursor-grabbing transition"
+                                      className="w-6 h-6 rounded-full bg-pink-100 hover:bg-pink-500 text-pink-600 hover:text-white border border-pink-300 flex items-center justify-center shadow-sm cursor-grab active:cursor-grabbing transition touch-none"
                                   >
                                       <Heart size={12} />
                                   </button>
@@ -1809,7 +1833,7 @@
                                               onMouseDown={(e) => startDraggingFromAnchor(e, node.id, bundle.wifeId)}
                                               onTouchStart={(e) => startDraggingFromAnchor(e, node.id, bundle.wifeId)}
                                               title="اسحب إلى امرأة لربط أو تغيير الأم لهذا الخط المستقل"
-                                              className={`cursor-grab active:cursor-grabbing px-3 py-1.5 rounded-full border text-[11px] font-bold flex items-center gap-1.5 shadow-sm transition mb-1 whitespace-nowrap shrink-0 ${
+                                              className={`cursor-grab active:cursor-grabbing px-2.5 py-1.5 rounded-full border text-[11px] font-bold inline-flex items-center gap-1.5 shadow-sm transition mb-1 whitespace-nowrap w-fit max-w-full touch-none ${
                                                   isUnassigned
                                                       ? 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-pink-50 hover:border-pink-300'
                                                       : isDivorced
@@ -1818,16 +1842,17 @@
                                               }`}
                                           >
                                               <span className={`w-2 h-2 rounded-full shrink-0 ${isUnassigned ? 'bg-gray-400' : isDivorced ? 'bg-red-300' : 'bg-pink-500'}`}></span>
-                                              <span className="whitespace-nowrap">
+                                              <span className="whitespace-nowrap leading-none py-0.5">
                                                   {isUnassigned ? 'أبناء غير مرتبطين بأم' : `أبناء: ${wifeFirstName}`}
                                               </span>
                                               {isDivorced && (
-                                                  <span className="bg-red-700 text-[9px] px-1.5 py-0.5 rounded-full whitespace-nowrap">منفصلان ✕</span>
+                                                  <span className="bg-red-700 text-[9px] px-1.5 py-0.5 rounded-full whitespace-nowrap leading-none">منفصلان ✕</span>
                                               )}
 
                                               <button
                                                   type="button"
                                                   onMouseDown={(e) => e.stopPropagation()}
+                                                  onTouchStart={(e) => e.stopPropagation()}
                                                   onClick={(e) => {
                                                       e.stopPropagation();
                                                       setQuickBranchParent(node);
@@ -1838,27 +1863,28 @@
                                                       setQuickBranchGender('male');
                                                   }}
                                                   title={isUnassigned ? 'إضافة ابن/بنت' : `إضافة ابن/بنت لـ (${firstNameDisplay}) و(${wifeFirstName})`}
-                                                  className="w-4 h-4 rounded-full bg-white/90 hover:bg-white text-gray-800 flex items-center justify-center shrink-0"
+                                                  className="w-5 h-5 rounded-full bg-white/90 hover:bg-white text-gray-800 flex items-center justify-center shrink-0 shadow-sm"
                                               >
-                                                  <Plus size={10} strokeWidth={3} />
+                                                  <Plus size={11} strokeWidth={3} />
                                               </button>
 
                                               {!isUnassigned && (
                                                   <button
                                                       type="button"
                                                       onMouseDown={(e) => e.stopPropagation()}
+                                                      onTouchStart={(e) => e.stopPropagation()}
                                                       onClick={(e) => {
                                                           e.stopPropagation();
                                                           toggleMarriageDivorceStatus(node.id, bundle.wifeId);
                                                       }}
                                                       title={isDivorced ? 'إلغاء حالة الانفصال' : 'تحديد الزواج كـ (تم الانفصال)'}
-                                                      className={`w-4 h-4 rounded-full flex items-center justify-center transition shrink-0 ${
+                                                      className={`w-5 h-5 rounded-full flex items-center justify-center transition shrink-0 shadow-sm ${
                                                           isDivorced
                                                               ? 'bg-white text-red-900 hover:bg-red-100'
                                                               : 'bg-white/90 text-red-700 hover:bg-red-600 hover:text-white'
                                                       }`}
                                                   >
-                                                      <X size={10} strokeWidth={3} />
+                                                      <X size={11} strokeWidth={3} />
                                                   </button>
                                               )}
                                           </div>
@@ -2002,14 +2028,15 @@
                       <div
                           ref={treeContainerRef}
                           onScroll={recomputeMotherConnectorLines}
-                          className="relative bg-white rounded-3xl border border-gray-200 shadow-inner p-6 sm:p-10 overflow-x-auto custom-scrollbar min-h-[520px] flex justify-center items-start select-none"
+                          className="relative bg-white rounded-3xl border border-gray-200 shadow-inner p-6 sm:p-10 overflow-x-auto overflow-y-auto custom-scrollbar min-h-[520px] flex items-start justify-center select-none"
+                          style={{ direction: 'ltr', justifyContent: 'safe center' }}
                       >
                           {/* طبقة خطوط الزواج والأمومة التفاعلية */}
                           <svg
-                              className="absolute top-0 right-0 pointer-events-none z-20 overflow-visible"
+                              className="absolute top-0 left-0 pointer-events-none z-20 overflow-visible"
                               style={{
-                                  width: treeContainerRef.current ? `${Math.max(treeContainerRef.current.scrollWidth, treeContainerRef.current.clientWidth)}px` : '100%',
-                                  height: treeContainerRef.current ? `${Math.max(treeContainerRef.current.scrollHeight, treeContainerRef.current.clientHeight)}px` : '100%'
+                                  width: treeSize.w ? `${treeSize.w}px` : '100%',
+                                  height: treeSize.h ? `${treeSize.h}px` : '100%'
                               }}
                           >
                               {connectorLines.map(line => {
@@ -3057,7 +3084,7 @@
                   </div>
                 </div>
               </header>
-              <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+              <main className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 ${view === 'gallery' && viewMode === 'tree' ? 'max-w-none' : 'max-w-7xl'}`}>
                 {view === 'gallery' && renderGallery()}
                 {view === 'add' && <CardFormView onSave={handleSaveCard} />}
                 {view === 'edit' && <CardFormView initialData={editingCard} onSave={handleSaveCard} />}
@@ -3067,8 +3094,55 @@
           );
         }
 
+        class ErrorBoundary extends React.Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, error: null };
+            }
+            static getDerivedStateFromError(error) {
+                return { hasError: true, error };
+            }
+            componentDidCatch(error, info) {
+                console.error("App crashed:", error, info);
+            }
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div dir="rtl" className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
+                            <div className="bg-white rounded-3xl shadow-xl border border-red-200 p-8 max-w-lg text-center">
+                                <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl font-black">!</div>
+                                <h2 className="text-xl font-black text-gray-800 mb-2">حدث خطأ غير متوقع</h2>
+                                <p className="text-sm text-gray-500 mb-6 leading-relaxed">تعذر عرض الصفحة. حاول تحديثها، وإن استمرت المشكلة فتحقق من اتصالك بالإنترنت (مكتبات التحميل الخارجية) ومن إعدادات Firebase.</p>
+                                <button onClick={() => window.location.reload()} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition">تحديث الصفحة</button>
+                            </div>
+                        </div>
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
         const root = createRoot(document.getElementById('root'));
-        root.render(<App />);
+        root.render(<ErrorBoundary><App /></ErrorBoundary>);
+    </script>
+
+    <!-- حارس ضد الشاشة البيضاء الصامتة: إذا فشل تحميل أي مكتبة خارجية (CDN/Firebase) لا يصل الخطأ إلى React، فنعرض رسالة واضحة -->
+    <script>
+        window.addEventListener('load', function () {
+            setTimeout(function () {
+                var rootEl = document.getElementById('root');
+                if (!rootEl || rootEl.children.length === 0) {
+                        rootEl.innerHTML =
+                            '<div dir="rtl" style="min-height:80vh;display:flex;align-items:center;justify-content:center;padding:24px;">' +
+                            '<div style="background:#fff;border:1px solid #fecaca;border-radius:24px;padding:32px;max-width:480px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.08);">' +
+                            '<div style="width:56px;height:56px;border-radius:9999px;background:#fee2e2;color:#dc2626;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-weight:900;font-size:24px;">!</div>' +
+                            '<h2 style="font-size:20px;font-weight:900;color:#1f2937;margin-bottom:8px;">تعذر تشغيل التطبيق</h2>' +
+                            '<p style="font-size:14px;color:#6b7280;margin-bottom:20px;line-height:1.8;">تعذر تحميل مكتبات التشغيل الخارجية (React / Firebase). تأكد من اتصالك بالإنترنت ثم أعد تحميل الصفحة.</p>' +
+                            '<button onclick="window.location.reload()" style="width:100%;background:#2563eb;color:#fff;font-weight:700;padding:12px;border-radius:12px;border:none;cursor:pointer;font-size:15px;">إعادة التحميل</button>' +
+                            '</div></div>';
+                }
+            }, 10000);
+        });
     </script>
 </body>
 </html>
