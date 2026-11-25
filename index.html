@@ -318,6 +318,18 @@
             return parts.length > 0 ? parts : [''];
         };
 
+        // إزالة ما بين القوسين من جزء الاسم للمقارنة فقط: "علي (حطام)" = "علي"
+        const cleanNamePart = (part) => (part || '').replace(/\s*\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+
+        // استخراج التسمية الفرعية الخاصة بالشخص نفسه من اسمه المكتوب: "علي (حطام) بن سالم" -> "حطام"
+        const extractOwnLabel = (card) => {
+            if (!card || !card.name) return '';
+            const own = parseNameParts(stripClanSuffix(card.name))[0] || '';
+            const matches = own.match(/\(([^)]*)\)/g);
+            if (!matches) return '';
+            return matches.map(m => m.slice(1, -1).trim()).filter(Boolean).join(' · ');
+        };
+
         const buildFullName = (parts, gender = 'male', includeClan = true) => {
             const validParts = parts.map(p => p.trim()).filter(Boolean);
             if (validParts.length === 0) return '';
@@ -377,6 +389,8 @@
           const treeContainerRef = useRef(null);
           const lineAnchorRefs = useRef(new Map());
           const womanCardRefs = useRef(new Map());
+          const manCardRefs = useRef(new Map());
+          const [hoveredManId, setHoveredManId] = useState(null);
 
           const [deleteConfirmCard, setDeleteConfirmCard] = useState(null);
           const [toastMessage, setToastMessage] = useState(null);
@@ -830,10 +844,32 @@
                       }
                   });
                   setHoveredWomanId(foundWomanId);
+
+                  // عند سحب قلب امرأة: البحث عن بطاقة رجل كهدف للإفلات
+                  let foundManId = null;
+                  if (draggingLine && draggingLine.fromWomanId) {
+                      manCardRefs.current.forEach((el, mId) => {
+                          if (!el) return;
+                          const mRect = el.getBoundingClientRect();
+                          if (
+                              clientX >= mRect.left - 8 &&
+                              clientX <= mRect.right + 8 &&
+                              clientY >= mRect.top - 8 &&
+                              clientY <= mRect.bottom + 8
+                          ) {
+                              foundManId = mId;
+                          }
+                      });
+                  }
+                  setHoveredManId(foundManId);
               };
 
               const handlePointerUp = async () => {
-                  if (draggingLine && hoveredWomanId) {
+                  if (draggingLine && draggingLine.fromWomanId) {
+                      if (hoveredManId) {
+                          await linkWomanToMan(draggingLine.fromWomanId, hoveredManId);
+                      }
+                  } else if (draggingLine && hoveredWomanId) {
                       await linkChildrenLineToMother(
                           draggingLine.fatherId,
                           draggingLine.sourceMotherId,
@@ -842,6 +878,7 @@
                   }
                   setDraggingLine(null);
                   setHoveredWomanId(null);
+                  setHoveredManId(null);
               };
 
               window.addEventListener('mousemove', handlePointerMove);
@@ -855,7 +892,7 @@
                   window.removeEventListener('touchmove', handlePointerMove);
                   window.removeEventListener('touchend', handlePointerUp);
               };
-          }, [draggingLine, hoveredWomanId, treeZoom]);
+          }, [draggingLine, hoveredWomanId, hoveredManId, treeZoom]);
 
           // التجوال في المشجرة بالإمساك بالخلفية الفارغة وسحبها (ماوس ولمس)
           const handlePanStart = (e) => {
@@ -1001,6 +1038,57 @@
               });
           };
 
+          // سحب زر القلب من بطاقة امرأة لربطها زوجاً لرجل (الإفلات على بطاقة رجل)
+          const startDraggingFromWoman = (e, womanId) => {
+              e.stopPropagation();
+              e.preventDefault();
+              if (!treeContainerRef.current) return;
+              const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+              const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+              const rect = treeContainerRef.current.getBoundingClientRect();
+              const z = treeZoom || 1;
+              const x = ((clientX - rect.left) / z) + Math.max(0, treeContainerRef.current.scrollLeft);
+              const y = ((clientY - rect.top) / z) + Math.max(0, treeContainerRef.current.scrollTop);
+
+              setDraggingLine({
+                  fromWomanId: womanId,
+                  startX: x,
+                  startY: y,
+                  currentX: x,
+                  currentY: y
+              });
+          };
+
+          // ربط امرأة برجل كزوجين (من سحب قلب المرأة وإفلاته على بطاقة رجل)
+          const linkWomanToMan = async (womanId, manId) => {
+              if (!womanId || !manId || womanId === manId) return;
+              const woman = cardsMap.get(womanId);
+              const man = cardsMap.get(manId);
+              if (!woman || !man) return;
+              if (getEffectiveGender(man) !== 'male') {
+                  showNotification("يرجى سحب الخط وإفلاته على بطاقة رجل ليتم التعرف عليه كزوج", "error");
+                  return;
+              }
+              try {
+                  const existingMarriages = Array.isArray(man.marriages) ? [...man.marriages] : [];
+                  if (!existingMarriages.some(m => m.wifeId === womanId)) {
+                      existingMarriages.push({ wifeId: womanId, status: 'active' });
+                      await updateDoc(doc(db, "flashcards", man.id), { marriages: existingMarriages });
+                  }
+                  const womanHusbands = Array.isArray(woman.husbandIds) ? [...woman.husbandIds] : [];
+                  if (!womanHusbands.includes(man.id)) {
+                      womanHusbands.push(man.id);
+                      await updateDoc(doc(db, "flashcards", woman.id), { husbandIds: womanHusbands });
+                  }
+                  const womanFirst = woman.firstName || parseNameParts(woman.name)[0];
+                  const manFirst = man.firstName || parseNameParts(man.name)[0];
+                  showNotification(`تم ربط ${womanFirst} زوجةً لـ ${manFirst}`, "success");
+              } catch (error) {
+                  console.error("Error linking woman to man:", error);
+                  showNotification("حدث خطأ أثناء ربط الزواج", "error");
+              }
+          };
+
           const startQuiz = (specificCards = null) => {
             const cardsToQuiz = specificCards || (filteredCards.length > 0 ? filteredCards : []);
             if (cardsToQuiz.length === 0) {
@@ -1128,7 +1216,7 @@
 
               const effectiveGender = detectGenderFromText(cardData.name || '', cardData.gender || 'male');
               const cleanParts = nameParts.map(p => p.trim()).filter(Boolean);
-              const firstName = cleanParts[0] || cardData.firstName || parseNameParts(cardData.name)[0] || '';
+              const firstName = cleanNamePart(cleanParts[0]) || cardData.firstName || cleanNamePart(parseNameParts(cardData.name)[0]) || '';
               const fullName = cleanParts.length > 0
                   ? buildFullName(cleanParts, effectiveGender, true)
                   : (cardData.name ? `${stripClanSuffix(cardData.name)} - ${CLAN_ROOT_TITLE}` : '');
@@ -1141,7 +1229,7 @@
                       if (isEdit && candidate.id === id) continue;
                       const candidateChain = getLineageChain(candidate, cardsMap);
                       const isMatch = ancestorSequence.every((part, idx) => 
-                          candidateChain[idx] && candidateChain[idx].trim() === part
+                          candidateChain[idx] && cleanNamePart(candidateChain[idx]) === cleanNamePart(part)
                       );
                       if (isMatch && candidateChain.length >= ancestorSequence.length) {
                           matchedParent = candidate;
@@ -1173,7 +1261,7 @@
                               const newAncestorRef = doc(collection(db, "flashcards"));
                               await setDoc(newAncestorRef, {
                                   name: buildFullName(subChain, 'male', true),
-                                  firstName: ancestorFirst,
+                                  firstName: cleanNamePart(ancestorFirst),
                                   gender: 'male',
                                   parentId: currentParentId,
                                   tags: resolvedTags,
@@ -1234,7 +1322,7 @@
                             const updateDescendants = async (parentId, parentChain) => {
                                 const kids = cards.filter(c => c.parentId === parentId);
                                 for (const kid of kids) {
-                                    const kidOwn = (parseNameParts(kid.name)[0] || kid.firstName || '').trim();
+                                    const kidOwn = cleanNamePart(parseNameParts(kid.name)[0] || kid.firstName || '');
                                     if (!kidOwn) continue;
                                     const kidGender = getEffectiveGender(kid);
                                     const kidChain = [kidOwn, ...parentChain];
@@ -1294,7 +1382,7 @@
                   const spliceDescendants = async (removedId, parentChain) => {
                       const kids = cards.filter(c => c.parentId === removedId);
                       for (const kid of kids) {
-                          const kidOwn = (parseNameParts(kid.name)[0] || kid.firstName || '').trim();
+                          const kidOwn = cleanNamePart(parseNameParts(kid.name)[0] || kid.firstName || '');
                           const kidGender = getEffectiveGender(kid);
                           const kidChain = kidOwn ? [kidOwn, ...parentChain] : parentChain;
                           const kidName = kidOwn ? buildFullName(kidChain, kidGender, true) : kid.name;
@@ -1586,7 +1674,7 @@
 
                 existingLineages.forEach(({ card, chain }) => {
                     if (isEdit && card.id === initialData.id) return;
-                    if (chain[0] && chain[0].includes(currentTyped)) {
+                    if (chain[0] && cleanNamePart(chain[0]).includes(cleanNamePart(currentTyped))) {
                         const key = chain.join('-');
                         if (!seenKeys.has(key)) {
                             seenKeys.add(key);
@@ -1602,7 +1690,7 @@
                 if (ancestorSeq.length === 0) return null;
                 for (const { card, chain } of existingLineages) {
                     if (isEdit && card.id === initialData.id) continue;
-                    const isMatch = ancestorSeq.every((part, idx) => chain[idx] === part);
+                    const isMatch = ancestorSeq.every((part, idx) => cleanNamePart(chain[idx]) === cleanNamePart(part));
                     if (isMatch && chain.length >= ancestorSeq.length) {
                         return card;
                     }
@@ -1639,7 +1727,7 @@
                 for (const candidate of cards) {
                     if (excludeId && candidate.id === excludeId) continue;
                     const chain = getLineageChain(candidate, cardsMap);
-                    const isMatch = ancestorSequence.every((part, idx) => chain[idx] && chain[idx].trim() === part);
+                    const isMatch = ancestorSequence.every((part, idx) => chain[idx] && cleanNamePart(chain[idx]) === cleanNamePart(part));
                     if (isMatch && chain.length >= ancestorSequence.length) return candidate.id;
                 }
                 let currentParentId = null;
@@ -1657,7 +1745,7 @@
                         const newAncestorRef = doc(collection(db, "flashcards"));
                         await setDoc(newAncestorRef, {
                             name: buildFullName(subChain, 'male', true),
-                            firstName: ancestorFirst,
+                            firstName: cleanNamePart(ancestorFirst),
                             gender: 'male',
                             parentId: currentParentId,
                             tags,
@@ -2619,8 +2707,10 @@
           const TreeNodeItem = ({ node, childrenMap }) => {
               const allChildren = childrenMap.get(node.id) || [];
               const firstNameDisplay = node.firstName || parseNameParts(node.name)[0] || 'بدون اسم';
+              const ownLabel = extractOwnLabel(node);
               const isFemale = getEffectiveGender(node) === 'female';
-              const isDropTarget = isFemale && hoveredWomanId === node.id;
+              const isDropTarget = isFemale && hoveredWomanId === node.id && !(draggingLine && draggingLine.fromWomanId);
+              const isManDropTarget = !isFemale && hoveredManId === node.id && draggingLine && draggingLine.fromWomanId;
 
               const marriages = !isFemale ? getFatherMarriages(node) : [];
               const hasMultipleWivesOrMothers = !isFemale && marriages.length > 0;
@@ -2664,12 +2754,15 @@
                                   if (isFemale) {
                                       if (el) womanCardRefs.current.set(node.id, el);
                                       else womanCardRefs.current.delete(node.id);
+                                  } else {
+                                      if (el) manCardRefs.current.set(node.id, el);
+                                      else manCardRefs.current.delete(node.id);
                                   }
                               }}
                               onClick={() => { setSelectedCard(node); setGalleryShowInfo(false); }}
-                              title={isFemale ? `بطاقة: ${getDisplayFullName(node)} (أسقط خط الأبناء هنا لربطها كأم)` : `عرض بطاقة: ${getDisplayFullName(node)}`}
+                              title={isFemale ? `بطاقة: ${getDisplayFullName(node)} (أسقط خط الزواج من قلبها على بطاقة رجل لربطها زوجةً له)` : `عرض بطاقة: ${getDisplayFullName(node)}`}
                               className={`cursor-pointer p-2.5 rounded-2xl border-2 transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 flex flex-col items-center min-w-[96px] max-w-[120px] bg-white relative ${
-                                  isDropTarget
+                                  isDropTarget || isManDropTarget
                                       ? 'border-pink-600 ring-4 ring-pink-300 scale-110 bg-pink-50 z-20'
                                       : isFemale
                                           ? 'border-pink-200 hover:border-pink-400 bg-gradient-to-b from-white to-pink-50/40'
@@ -2681,13 +2774,35 @@
                                       أفلت للربط كأم
                                   </span>
                               )}
+                              {isManDropTarget && (
+                                  <span className="absolute -top-6 bg-pink-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shadow z-20">
+                                      أفلت لربطها زوجةً له
+                                  </span>
+                              )}
                               <PersonAvatar card={{ ...node, gender: isFemale ? 'female' : 'male' }} sizeClass="w-14 h-14" />
                               <span className="mt-2 font-extrabold text-sm text-gray-800 whitespace-nowrap truncate max-w-full text-center">
                                   {firstNameDisplay}
                               </span>
+                              {ownLabel && (
+                                  <span className="mt-0.5 text-[10px] font-light text-gray-500 whitespace-nowrap truncate max-w-full text-center leading-tight" title={ownLabel}>
+                                      {ownLabel}
+                                  </span>
+                              )}
                           </div>
 
                           <div className="mt-1.5 flex items-center gap-1.5 z-10">
+                              {isFemale ? (
+                                  // زر القلب للإناث: سحبه وإفلاته على بطاقة رجل لربطها زوجةً له
+                                  <button
+                                      type="button"
+                                      onMouseDown={(e) => startDraggingFromWoman(e, node.id)}
+                                      onTouchStart={(e) => startDraggingFromWoman(e, node.id)}
+                                      title="اسحب هذا القلب إلى بطاقة رجل لربطها زوجةً له"
+                                      className="w-6 h-6 rounded-full bg-pink-100 hover:bg-pink-500 text-pink-600 hover:text-white border border-pink-300 flex items-center justify-center shadow-sm cursor-grab active:cursor-grabbing transition touch-none"
+                                  >
+                                      <Heart size={12} strokeWidth={3} />
+                                  </button>
+                              ) : (
                               <button
                                   type="button"
                                   onClick={(e) => {
@@ -2706,6 +2821,7 @@
                               >
                                   <Plus size={14} strokeWidth={3} />
                               </button>
+                              )}
 
                               {!isFemale && (
                                   <button
@@ -2960,8 +3076,9 @@
                       >
                           {/* طبقة خطوط الزواج والأمومة التفاعلية */}
                           <svg
-                              className="absolute top-0 left-0 pointer-events-none z-20 overflow-visible"
+                              className="absolute top-0 left-0 pointer-events-none overflow-visible"
                               style={{
+                                  zIndex: draggingLine ? 30 : 0,
                                   width: treeSize.w ? `${treeSize.w}px` : '100%',
                                   height: treeSize.h ? `${treeSize.h}px` : '100%'
                               }}
