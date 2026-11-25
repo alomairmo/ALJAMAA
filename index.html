@@ -328,6 +328,8 @@
           const [showNames, setShowNames] = useState(true);
           const [selectedCard, setSelectedCard] = useState(null);
           const [galleryShowInfo, setGalleryShowInfo] = useState(false);
+          const [hideMalesNoImage, setHideMalesNoImage] = useState(false);
+          const [hideNoDescription, setHideNoDescription] = useState(false);
           const [editingCard, setEditingCard] = useState(null);
 
           const [user, setUser] = useState(null);
@@ -491,6 +493,13 @@
               (card.firstName && card.firstName.toLowerCase().includes(searchLower)) ||
               (card.description && card.description.toLowerCase().includes(searchLower)) ||
               (card.tags && card.tags.some(t => t.toLowerCase().includes(searchLower)));
+          });
+
+          // فلاتر عرض "كل الصور": إخفاء الذكور بلا صور، وإخفاء من بلا وصف/معلومات
+          const galleryCards = filteredCards.filter(card => {
+            if (hideMalesNoImage && getEffectiveGender(card) === 'male' && !card.image) return false;
+            if (hideNoDescription && !(card.description && card.description.trim())) return false;
+            return true;
           });
 
           const folders = {};
@@ -662,6 +671,36 @@
               } catch (err) {
                   console.error(err);
               }
+          };
+
+          // إزالة الابن من أبيه (تصبح بطاقة حرة غير مرتبطة)
+          const unlinkChildFromParent = async (childId) => {
+              try {
+                  await updateDoc(doc(db, "flashcards", childId), { parentId: null, motherId: null, parentsDivorced: false });
+                  showNotification("تمت إزالة الابن من هذا الخط (أصبحت بطاقته حرة)", "info");
+              } catch (err) {
+                  console.error(err);
+                  showNotification("حدث خطأ أثناء إزالة الابن", "error");
+              }
+          };
+
+          // إزالة ربط الأم عن ابنها (يبقى الأب)
+          const unlinkChildFromMother = async (childId) => {
+              try {
+                  await updateDoc(doc(db, "flashcards", childId), { motherId: null, parentsDivorced: false });
+                  showNotification("تمت إزالة ربط الأم (يبقى الأب كما هو)", "info");
+              } catch (err) {
+                  console.error(err);
+                  showNotification("حدث خطأ أثناء إزالة ربط الأم", "error");
+              }
+          };
+
+          // الانتقال إلى بطاقة قريب من داخل شاشة التعديل: إغلاق نافذة التعديل وفتح بطاقته
+          const navigateToRelative = (relative) => {
+              if (!relative) return;
+              setEditingCard(null);
+              setSelectedCard(relative);
+              setGalleryShowInfo(false);
           };
 
           // حساب إحداثيات خطوط الزواج/الأمومة بدقة من حافة بطاقة الأم إلى حافة شارة خط الأبناء
@@ -866,6 +905,18 @@
               };
           }, [viewMode, handlePanStart, handlePanMove, handlePanEnd]);
 
+          // توسيط المشجرة داخل الحاوية عند فتحها أول مرة (لتوفير مساحة سحب حرة في كل الاتجاهات)
+          useEffect(() => {
+              if (viewMode !== 'tree') return;
+              const container = treeContainerRef.current;
+              if (!container) return;
+              const t = setTimeout(() => {
+                  container.scrollLeft = Math.max(0, (container.scrollWidth - container.clientWidth) / 2);
+                  container.scrollTop = Math.max(0, (container.scrollHeight - container.clientHeight) / 2);
+              }, 150);
+              return () => clearTimeout(t);
+          }, [viewMode, activeTreeSubTab]);
+
           const startDraggingFromAnchor = (e, fatherId, sourceMotherId) => {
               e.stopPropagation();
               e.preventDefault();
@@ -929,6 +980,78 @@
             newQueue.splice(insertIndex, 0, currentCard);
             setQuizQueue(newQueue);
             setQuizShowInfo(false);
+          };
+
+          const bulkFileInputRef = useRef(null);
+          const [isBulkAdding, setIsBulkAdding] = useState(false);
+
+          const compressImageFileToBase64 = (file) => {
+              return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (event) => {
+                  const img = new window.Image();
+                  img.src = event.target.result;
+                  img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 800;
+                    const MAX_HEIGHT = 800;
+                    let width = img.width;
+                    let height = img.height;
+                    if (width > height) {
+                      if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                    } else {
+                      if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', 0.7));
+                  };
+                  img.onerror = (error) => reject(error);
+                };
+                reader.onerror = (error) => reject(error);
+              });
+          };
+
+          // إضافة جماعية: اختيار عدة صور دفعة واحدة تنشئ بطاقات بدون أسماء
+          const handleBulkImagesSelected = async (e) => {
+              const files = Array.from(e.target.files || []);
+              e.target.value = '';
+              if (!files.length) return;
+              setIsBulkAdding(true);
+              let added = 0;
+              try {
+                  for (const file of files) {
+                      if (!file.type.startsWith('image/')) continue;
+                      try {
+                          const imageUrl = await compressImageFileToBase64(file);
+                          const newDocRef = doc(collection(db, "flashcards"));
+                          await setDoc(newDocRef, {
+                              name: '',
+                              firstName: '',
+                              gender: '',
+                              parentId: null,
+                              motherId: null,
+                              description: '',
+                              image: imageUrl,
+                              tags: [],
+                              marriages: [],
+                              correctCount: 0,
+                              wrongCount: 0,
+                              userId: user?.uid || 'anonymous'
+                          });
+                          added++;
+                          showNotification(`تمت إضافة ${added} من ${files.length} بطاقة...`, "success");
+                      } catch (err) {
+                          console.error("Bulk add error:", err);
+                      }
+                  }
+                  showNotification(`تمت الإضافة الجماعية: ${added} بطاقة جديدة بدون أسماء (عدّلها لاحقاً لإضافة الأسماء)`, "success");
+              } finally {
+                  setIsBulkAdding(false);
+              }
           };
 
           const handleSaveCard = async (cardData, isEdit, id, nameParts = []) => {
@@ -1494,6 +1617,10 @@
                 (me && gender !== 'female') ? getFatherMarriages(me).filter(m => m.status !== 'divorced') : [],
                 [me, gender, cards, cardsMap]);
 
+            const myActiveWivesAll = useMemo(() =>
+                (me && gender !== 'female') ? getFatherMarriages(me) : [],
+                [me, gender, cards, cardsMap]);
+
             const childCandidates = useMemo(() => {
                 const q = childName.trim();
                 if (!q || !isEdit || !initialData) return [];
@@ -1737,18 +1864,20 @@
                   finalImageUrl = await compressImageToBase64(imageFile);
                 }
                 const fullName = buildFullName(nameParts, gender, true);
+                const cleanPartsForSave = nameParts.map(p => p.trim()).filter(Boolean);
                 await onSave(
-                    { 
-                        name: fullName, 
+                    {
+                        name: fullName,
                         firstName: nameParts[0]?.trim() || '',
                         gender,
                         motherId: motherId || null,
-                        description, 
-                        image: finalImageUrl, 
+                        description,
+                        image: finalImageUrl,
                         tags,
-                        parentId: initialData?.parentId || null
-                    }, 
-                    isEdit, 
+                        // إذا حُذف اسم الأب وكل الأسلاف وبقي الاسم الأول فقط تُفصل البطاقة عن أبيها (تصبح فرعاً حراً)
+                        parentId: cleanPartsForSave.length > 1 ? (initialData?.parentId || null) : null
+                    },
+                    isEdit,
                     initialData?.id,
                     nameParts
                 );
@@ -1875,12 +2004,12 @@
                                   : 'border-gray-200 bg-white focus:ring-indigo-500 text-gray-700'
                               }`}
                             />
-                            {idx > 1 && (
+                            {idx > 0 && (
                               <button
                                 type="button"
                                 onClick={() => handleRemoveNameSlot(idx)}
                                 className="absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-red-500 p-0.5"
-                                title="حذف هذه الخانة"
+                                title={idx === 1 ? 'حذف اسم الأب (ستُفصل البطاقة عن أبيها إن لم يبقَ أسلاف)' : 'حذف هذه الخانة'}
                               >
                                 <X size={14} />
                               </button>
@@ -2093,6 +2222,109 @@
                         )}
                       </div>
                       <p className="text-[11px] text-emerald-700/70 mt-1.5">يكتمل الاسم تلقائياً وفق تسلسل الأب في المشجرة، وتُربط الأم تلقائياً إن كانت زوجة واحدة.</p>
+                    </div>
+                  )}
+
+                  {isEdit && me && (
+                    <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200 relative">
+                      <label className="block text-amber-900 font-bold mb-2 flex items-center gap-2 text-sm">
+                        <Users size={16} className="text-amber-600" /> الأقارب المرتبطون (إدارة الروابط)
+                      </label>
+
+                      {/* الأم */}
+                      {me.motherId && cardsMap.get(me.motherId) && (
+                        <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-pink-200 mb-2">
+                          <button
+                            type="button"
+                            onClick={() => navigateToRelative(cardsMap.get(me.motherId))}
+                            className="text-sm font-black text-pink-900 hover:underline"
+                          >
+                            الأم: {getDisplayFullName(cardsMap.get(me.motherId))}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => unlinkChildFromMother(me.id)}
+                            title="إزالة ربط الأم (يبقى الأب)"
+                            className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 hover:bg-red-100 hover:text-red-700 transition"
+                          >
+                            إزالة الربط
+                          </button>
+                        </div>
+                      )}
+
+                      {/* الزوج/الزوجة */}
+                      {(gender === 'female' ? myMarriagesAsWoman : myActiveWivesAll).length > 0 && (
+                        <div className="space-y-2 mb-2">
+                          <div className="text-[11px] font-black text-amber-800">{gender === 'female' ? 'الأزواج:' : 'الزوجات:'}</div>
+                          {(gender === 'female' ? myMarriagesAsWoman : myActiveWivesAll).map((m, idx) => {
+                            const partner = gender === 'female' ? m.husband : cardsMap.get(m.wifeId);
+                            if (!partner) return null;
+                            const isDiv = m.status === 'divorced';
+                            const husbandId = gender === 'female' ? partner.id : me.id;
+                            const wifeId = gender === 'female' ? me.id : partner.id;
+                            return (
+                              <div key={partner.id} className={`flex flex-wrap items-center justify-between gap-2 bg-white px-3 py-2 rounded-xl border ${isDiv ? 'border-red-300 bg-red-50/60' : 'border-sky-200'}`}>
+                                <button
+                                  type="button"
+                                  onClick={() => navigateToRelative(partner)}
+                                  className="text-sm font-black text-gray-800 hover:underline"
+                                >
+                                  {gender === 'female' ? 'الزوج' : 'الزوجة'} {idx + 1}: {getDisplayFullName(partner)}
+                                </button>
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleMarriageDivorceStatus(husbandId, wifeId)}
+                                    className={`text-[11px] font-bold px-2.5 py-1 rounded-full transition ${isDiv ? 'bg-red-800 text-white hover:bg-red-900' : 'bg-emerald-100 text-emerald-800 hover:bg-red-100 hover:text-red-800'}`}
+                                  >
+                                    {isDiv ? 'منفصل (اضغط للوصل)' : 'متصل (اضغط للانفصال)'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => unlinkMotherFromFather(husbandId, wifeId)}
+                                    title="فك ارتباط الزواج نهائياً"
+                                    className="text-gray-400 hover:text-red-600 p-1"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* الأبناء */}
+                      {existingChildren.length > 0 && (
+                        <div>
+                          <div className="text-[11px] font-black text-amber-800 mb-1.5">الأبناء:</div>
+                          <div className="space-y-1.5">
+                            {existingChildren.map(kid => (
+                              <div key={kid.id} className="flex items-center justify-between bg-white px-3 py-1.5 rounded-xl border border-emerald-200">
+                                <button
+                                  type="button"
+                                  onClick={() => navigateToRelative(kid)}
+                                  className="text-sm font-bold text-gray-800 hover:underline"
+                                >
+                                  {getDisplayFullName(kid)}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => unlinkChildFromParent(kid.id)}
+                                  title="إزالة الابن من هذا الأب (تصبح بطاقة حرة)"
+                                  className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 hover:bg-red-100 hover:text-red-700 transition"
+                                >
+                                  إزالة
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {(!me.motherId || cardsMap.get(me.motherId) === undefined) && (gender === 'female' ? myMarriagesAsWoman : myActiveWivesAll).length === 0 && existingChildren.length === 0 && (
+                        <p className="text-[11px] text-amber-700/70">لا يوجد أقارب مرتبطون بهذه البطاقة بعد.</p>
+                      )}
                     </div>
                   )}
 
@@ -2514,8 +2746,8 @@
                           onPointerMove={handlePanMove}
                           onPointerUp={handlePanEnd}
                           onPointerCancel={handlePanEnd}
-                          className={`relative bg-white rounded-3xl border border-gray-200 shadow-inner p-6 sm:p-10 overflow-x-auto overflow-y-auto custom-scrollbar min-h-[520px] flex items-start justify-center select-none ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
-                          style={{ direction: 'ltr', justifyContent: 'safe center', touchAction: 'none' }}
+                          className={`relative bg-white rounded-3xl border border-gray-200 shadow-inner p-6 sm:p-10 overflow-x-auto overflow-y-auto custom-scrollbar min-h-[560px] flex items-start justify-center select-none ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
+                          style={{ direction: 'ltr', justifyContent: 'safe center', touchAction: 'none', height: 'calc(100vh - 280px)' }}
                       >
                           {/* طبقة خطوط الزواج والأمومة التفاعلية */}
                           <svg
@@ -2573,6 +2805,10 @@
                           </svg>
 
                           <div
+                              className="tree-canvas"
+                              style={{ padding: '260px 120px' }}
+                          >
+                          <div
                               className="tree-wrapper transition-transform origin-top relative z-10"
                               style={{ transform: `scale(${treeZoom})` }}
                           >
@@ -2618,6 +2854,7 @@
                                       </li>
                                   </ul>
                               </div>
+                          </div>
                           </div>
                       </div>
 
@@ -2669,16 +2906,30 @@
                 : [];
             const hasMultipleHusbands = selectedCardIsFemale && selectedCardMarriages.length > 1;
             const hasDivorcedHistory = selectedCardIsFemale && selectedCardMarriages.some(m => m.status === 'divorced');
+            const selectedCardFather = selectedCard?.parentId ? cardsMap.get(selectedCard.parentId) : null;
+            const selectedCardChildren = selectedCard
+                ? cards.filter(c => c.parentId === selectedCard.id)
+                : [];
 
             return (
               <div className="animate-in fade-in duration-300">
                 <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-2xl shadow-sm mb-4 gap-4 border border-gray-100">
                   <div className="flex items-center gap-4 w-full sm:w-auto">
-                    <button 
+                    <button
                       onClick={() => setView('add')}
                       className="flex items-center gap-2 bg-blue-50 text-blue-600 px-4 py-2 rounded-xl hover:bg-blue-100 transition font-medium w-full sm:w-auto justify-center"
                     >
                       <Plus size={20} /> إضافة بطاقة
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isBulkAdding}
+                      onClick={() => bulkFileInputRef.current && bulkFileInputRef.current.click()}
+                      title="إضافة جماعية: اختر عدة صور من جهازك لإنشاء بطاقات بدون أسماء"
+                      className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl hover:bg-indigo-100 transition font-medium w-full sm:w-auto justify-center disabled:opacity-50"
+                    >
+                      {isBulkAdding ? <Loader2 size={20} className="animate-spin" /> : <ImageIcon size={20} />}
+                      {isBulkAdding ? 'جاري الإضافة...' : 'إضافة صور جماعية'}
                     </button>
                     {viewMode !== 'tree' && (
                       <label className="flex items-center cursor-pointer gap-3 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100">
@@ -2755,8 +3006,42 @@
                 ) : (
                   <>
                     {viewMode === 'all' && (
+                      <div className="flex flex-wrap items-center gap-3 mb-5">
+                        <button
+                          type="button"
+                          onClick={() => setHideMalesNoImage(v => !v)}
+                          className={`flex items-center gap-2.5 px-4 py-2 rounded-xl border-2 text-sm font-bold transition ${
+                            hideMalesNoImage
+                              ? 'bg-sky-600 border-sky-600 text-white shadow-md'
+                              : 'bg-white border-gray-200 text-gray-600 hover:border-sky-300'
+                          }`}
+                        >
+                          <span className={`w-9 h-5 rounded-full relative transition ${hideMalesNoImage ? 'bg-white/30' : 'bg-gray-300'}`}>
+                            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${hideMalesNoImage ? 'left-0.5' : 'left-[18px]'}`} style={{ left: hideMalesNoImage ? '18px' : '2px' }} />
+                          </span>
+                          إخفاء الذكور بدون صور
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setHideNoDescription(v => !v)}
+                          className={`flex items-center gap-2.5 px-4 py-2 rounded-xl border-2 text-sm font-bold transition ${
+                            hideNoDescription
+                              ? 'bg-indigo-600 border-indigo-600 text-white shadow-md'
+                              : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300'
+                          }`}
+                        >
+                          <span className={`w-9 h-5 rounded-full relative transition ${hideNoDescription ? 'bg-white/30' : 'bg-gray-300'}`}>
+                            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all`} style={{ left: hideNoDescription ? '18px' : '2px' }} />
+                          </span>
+                          إخفاء من لا يوجد لديهم وصف/معلومات
+                        </button>
+                        <span className="text-xs text-gray-400 font-bold">العدد المعروض: {galleryCards.length}</span>
+                      </div>
+                    )}
+
+                    {viewMode === 'all' && (
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                        {filteredCards.map(card => {
+                        {galleryCards.map(card => {
                           const isFemale = getEffectiveGender(card) === 'female';
                           return (
                             <div 
@@ -2890,8 +3175,26 @@
                         )}
                       </div>
 
-                      {(selectedCardMother || selectedCardMarriages.length > 0) && (
+                      {(selectedCardMother || selectedCardFather || selectedCardMarriages.length > 0 || selectedCardChildren.length > 0) && (
                         <div className="mb-4 bg-gradient-to-l from-pink-50/80 via-white to-sky-50/70 border border-pink-200 rounded-2xl p-4 space-y-3 text-right">
+                          {selectedCardFather && (
+                            <div className="flex items-center justify-between bg-white px-3.5 py-2.5 rounded-xl border border-sky-200 shadow-xs">
+                              <div className="flex items-center gap-2.5">
+                                <span className="bg-sky-100 text-sky-700 p-1.5 rounded-lg"><Users size={16} /></span>
+                                <div>
+                                  <div className="text-[11px] text-sky-600 font-bold">الأب:</div>
+                                  <div className="text-sm font-black text-gray-800">{getDisplayFullName(selectedCardFather)}</div>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => { setSelectedCard(selectedCardFather); setGalleryShowInfo(false); }}
+                                className="text-xs bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold px-3 py-1.5 rounded-lg transition"
+                              >
+                                عرض بطاقته
+                              </button>
+                            </div>
+                          )}
                           {selectedCardMother && (
                             <div className="flex items-center justify-between bg-white px-3.5 py-2.5 rounded-xl border border-pink-200 shadow-xs">
                               <div className="flex items-center gap-2.5">
@@ -3066,9 +3369,33 @@
                               })}
                             </div>
                           )}
+
+                          {selectedCardChildren.length > 0 && (
+                            <div className="bg-white px-3.5 py-2.5 rounded-xl border border-emerald-200 shadow-xs">
+                              <div className="text-xs font-black text-emerald-800 flex items-center gap-1.5 mb-1.5">
+                                <Users size={14} /> جميع الأبناء ({selectedCardChildren.length}):
+                              </div>
+                              <div className="inline-flex flex-wrap gap-1">
+                                {selectedCardChildren.map(kid => (
+                                  <button
+                                    key={kid.id}
+                                    type="button"
+                                    onClick={() => { setSelectedCard(kid); setGalleryShowInfo(false); }}
+                                    className={`px-2.5 py-1 rounded-full font-bold text-[11px] border transition ${
+                                      getEffectiveGender(kid) === 'female'
+                                        ? 'bg-pink-50 hover:bg-pink-100 text-pink-800 border-pink-200'
+                                        : 'bg-sky-50 hover:bg-sky-100 text-sky-800 border-sky-200'
+                                    }`}
+                                  >
+                                    {kid.firstName || parseNameParts(kid.name)[0]}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
-                      
+
                       <div className="w-full h-[40vh] min-h-[300px] rounded-3xl overflow-hidden bg-gray-50 relative border border-gray-100 mb-6 flex items-center justify-center p-4">
                         {!galleryShowInfo ? (
                           <div className="w-full h-full flex items-center justify-center animate-in fade-in zoom-in duration-300">
@@ -3082,6 +3409,51 @@
                           <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300 overflow-y-auto">
                             <h3 className="text-2xl font-black text-gray-800 mb-4">{getDisplayFullName(selectedCard)}</h3>
                             <p className="text-gray-600 text-lg leading-relaxed mb-4">{selectedCard.description || 'لا يوجد وصف مضاف لهذه البطاقة بعد'}</p>
+
+                            {(selectedCardMother || selectedCardFather) && (
+                              <div className="w-full flex flex-wrap items-center justify-center gap-2 mb-3">
+                                {selectedCardFather && (
+                                  <button
+                                    type="button"
+                                    onClick={() => { setSelectedCard(selectedCardFather); setGalleryShowInfo(false); }}
+                                    className="bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-bold text-xs transition"
+                                  >
+                                    الأب: {selectedCardFather.firstName || parseNameParts(selectedCardFather.name)[0]}
+                                  </button>
+                                )}
+                                {selectedCardMother && (
+                                  <button
+                                    type="button"
+                                    onClick={() => { setSelectedCard(selectedCardMother); setGalleryShowInfo(false); }}
+                                    className="bg-pink-50 hover:bg-pink-100 text-pink-800 border border-pink-200 px-3 py-1 rounded-full font-bold text-xs transition"
+                                  >
+                                    الأم: {selectedCardMother.firstName || parseNameParts(selectedCardMother.name)[0]}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            {selectedCardChildren.length > 0 && (
+                              <div className="w-full">
+                                <div className="text-xs font-black text-emerald-800 mb-1.5">الأبناء ({selectedCardChildren.length}):</div>
+                                <div className="flex flex-wrap items-center justify-center gap-1.5">
+                                  {selectedCardChildren.map(kid => (
+                                    <button
+                                      key={kid.id}
+                                      type="button"
+                                      onClick={() => { setSelectedCard(kid); setGalleryShowInfo(false); }}
+                                      className={`px-2.5 py-1 rounded-full font-bold text-[11px] border transition ${
+                                        getEffectiveGender(kid) === 'female'
+                                          ? 'bg-pink-50 hover:bg-pink-100 text-pink-800 border-pink-200'
+                                          : 'bg-sky-50 hover:bg-sky-100 text-sky-800 border-sky-200'
+                                      }`}
+                                    >
+                                      {kid.firstName || parseNameParts(kid.name)[0]}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -3557,6 +3929,15 @@
                   {toastMessage.msg}
                 </div>
               )}
+
+              <input
+                ref={bulkFileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleBulkImagesSelected}
+              />
 
               {editingCard && (
                 <div
