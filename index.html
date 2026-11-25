@@ -906,7 +906,7 @@
               recomputeMotherConnectorLines();
           };
 
-          // عجلة الماوس = تكبير/تصغير مرسّك عند مؤشر الفأرة (على الكمبيوتر)
+          // عجلة الماوس/لوحة اللمس: القرص (ctrl+wheel) = تكبير/تصغير، والسحب بإصبعين = تحريك المشجرة
           const treeZoomRef = useRef(1);
           useEffect(() => { treeZoomRef.current = treeZoom; }, [treeZoom]);
 
@@ -917,6 +917,20 @@
               e.preventDefault();
               e.stopPropagation();
               const z = treeZoomRef.current || 1;
+
+              // السحب بإصبعين على لوحة اللمس = تحريك المشجرة:
+              // إما سحب أفقي صريح، أو دفعات صغيرة/ناعمة (دلتا صغيرة = لوحة لمس لا عجلة ماوس)
+              const isTrackpadPan = !e.ctrlKey && (
+                  Math.abs(e.deltaX || 0) > Math.abs(e.deltaY || 0) ||
+                  Math.abs(e.deltaY || 0) < 40
+              );
+              if (isTrackpadPan) {
+                  container.scrollLeft = Math.max(0, container.scrollLeft + (e.deltaX || 0) / z);
+                  container.scrollTop = Math.max(0, container.scrollTop + (e.deltaY || 0) / z);
+                  return;
+              }
+
+              // القرص (لوحة اللمس) أو عجلة الماوس = تكبير/تصغير مرسّك عند المؤشر
               const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
               const nz = Math.min(1.5, Math.max(0.5, +(z * factor).toFixed(2)));
               if (Math.abs(nz - z) < 0.001) return;
