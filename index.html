@@ -285,19 +285,27 @@
                 .map(s => s.trim())
                 .filter(Boolean);
 
-            // دمج "آل" مع الاسم الذي يليها كوحدة واحدة (جزء لا يتجزأ مما بعدها)
-            // مع فصلها فصلاً كاملاً عن الاسم الذي يسبقها
+            // المسافات لا تفصل بين الأسماء إطلاقًا: "محمد خالد" اسم واحد كامل.
+            // الفاصل الوحيد دون بن/بنت هو كلمة "آل" التي تلتصق بما بعدها وتفصل عمّا قبلها
             const groupAlTokens = (segment) => {
                 const tokens = segment.split(/\s+/).filter(Boolean);
                 const parts = [];
+                let buffer = [];
                 for (let i = 0; i < tokens.length; i++) {
                     if (tokens[i] === 'آل' && tokens[i + 1]) {
+                        if (buffer.length) {
+                            parts.push(buffer.join(' '));
+                            buffer = [];
+                        }
                         // "آل" جزء لا يتجزأ مما يليها، وفاصل عمّا قبلها
                         parts.push(`${tokens[i]} ${tokens[i + 1]}`);
                         i++;
                     } else {
-                        parts.push(tokens[i]);
+                        buffer.push(tokens[i]);
                     }
+                }
+                if (buffer.length) {
+                    parts.push(buffer.join(' '));
                 }
                 return parts;
             };
@@ -365,6 +373,7 @@
           const [connectorLines, setConnectorLines] = useState([]);
           const [isPanning, setIsPanning] = useState(false);
           const panState = useRef(null);
+          const panRaf = useRef(null);
           const treeContainerRef = useRef(null);
           const lineAnchorRefs = useRef(new Map());
           const womanCardRefs = useRef(new Map());
@@ -513,7 +522,7 @@
 
           const getFatherMarriages = useCallback((fatherCard) => {
               if (!fatherCard) return [];
-              const explicitMarriages = Array.isArray(fatherCard.marriages) ? [...fatherCard.marriages] : [];
+              const explicitMarriages = (Array.isArray(fatherCard.marriages) ? [...fatherCard.marriages] : []).filter(m => m.wifeId !== fatherCard.id);
               const seenWives = new Set(explicitMarriages.map(m => m.wifeId));
 
               cards.forEach(child => {
@@ -537,7 +546,7 @@
               cards.forEach(person => {
                   if (Array.isArray(person.marriages)) {
                       const found = person.marriages.find(m => m.wifeId === womanCard.id);
-                      if (found && !seenHusbands.has(person.id)) {
+                      if (found && !seenHusbands.has(person.id) && person.id !== womanCard.id) {
                           seenHusbands.add(person.id);
                           results.push({
                               husband: person,
@@ -880,6 +889,13 @@
               const dy = e.clientY - panState.current.startY;
               container.scrollLeft = panState.current.startScrollLeft - dx;
               container.scrollTop = panState.current.startScrollTop - dy;
+              // إبقاء خطوط الزواج ملاصقة أثناء السحب لأن طبقة الخطوط تحوّل الإحداثيات يدويًا
+              if (!panRaf.current) {
+                  panRaf.current = requestAnimationFrame(() => {
+                      panRaf.current = null;
+                      recomputeMotherConnectorLines();
+                  });
+              }
           };
 
           const handlePanEnd = (e) => {
@@ -887,7 +903,36 @@
               if (e.pointerId !== undefined && panState.current.pointerId !== e.pointerId) return;
               panState.current = null;
               setIsPanning(false);
+              recomputeMotherConnectorLines();
           };
+
+          // عجلة الماوس = تكبير/تصغير مرسّك عند مؤشر الفأرة (على الكمبيوتر)
+          const treeZoomRef = useRef(1);
+          useEffect(() => { treeZoomRef.current = treeZoom; }, [treeZoom]);
+
+          const handleWheelZoom = useCallback((e) => {
+              if (viewMode !== 'tree') return;
+              const container = treeContainerRef.current;
+              if (!container) return;
+              e.preventDefault();
+              e.stopPropagation();
+              const z = treeZoomRef.current || 1;
+              const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+              const nz = Math.min(1.5, Math.max(0.5, +(z * factor).toFixed(2)));
+              if (Math.abs(nz - z) < 0.001) return;
+              const rect = container.getBoundingClientRect();
+              const cx = e.clientX;
+              const cy = e.clientY;
+              const contentX = (cx - rect.left) / z + Math.max(0, container.scrollLeft);
+              const contentY = (cy - rect.top) / z + Math.max(0, container.scrollTop);
+              setTreeZoom(nz);
+              requestAnimationFrame(() => {
+                  const c = treeContainerRef.current;
+                  if (!c) return;
+                  c.scrollLeft = Math.max(0, contentX - (cx - rect.left) / nz);
+                  c.scrollTop = Math.max(0, contentY - (cy - rect.top) / nz);
+              });
+          }, [viewMode]);
 
           // ربط مباشر بأحداث المتصفح الأصلية لضمان عمل السحب في كل الظروف
           useEffect(() => {
@@ -897,13 +942,17 @@
               container.addEventListener('pointermove', handlePanMove);
               container.addEventListener('pointerup', handlePanEnd);
               container.addEventListener('pointercancel', handlePanEnd);
+              container.addEventListener('wheel', handleWheelZoom, { passive: false });
+              container.addEventListener('scroll', recomputeMotherConnectorLines);
               return () => {
                   container.removeEventListener('pointerdown', handlePanStart);
                   container.removeEventListener('pointermove', handlePanMove);
                   container.removeEventListener('pointerup', handlePanEnd);
                   container.removeEventListener('pointercancel', handlePanEnd);
+                  container.removeEventListener('wheel', handleWheelZoom);
+                  container.removeEventListener('scroll', recomputeMotherConnectorLines);
               };
-          }, [viewMode, handlePanStart, handlePanMove, handlePanEnd]);
+          }, [viewMode, handlePanStart, handlePanMove, handlePanEnd, handleWheelZoom, recomputeMotherConnectorLines]);
 
           // توسيط المشجرة داخل الحاوية عند فتحها أول مرة (لتوفير مساحة سحب حرة في كل الاتجاهات)
           useEffect(() => {
@@ -1151,6 +1200,44 @@
               if (isEdit) {
                 await updateDoc(doc(db, "flashcards", id), finalPayload);
                 showNotification("تم حفظ التعديلات بنجاح", "success");
+
+                // إذا تغيّر اسم الشخص أو أسماء آبائه وله أبناء تابعون له، نعرض خيار تحديث أسمائهم ليبقوا تابعين له
+                try {
+                    const oldChain = getLineageChain(cardsMap.get(id) || {}, cardsMap);
+                    const newChain = cleanParts.length > 1
+                        ? [...cleanParts]
+                        : [firstName, ...oldChain.slice(1)];
+                    const lineageChanged = newChain.join('|') !== oldChain.join('|');
+                    const childrenOfEdited = cards.filter(c => c.parentId === id);
+                    if (lineageChanged && childrenOfEdited.length > 0) {
+                        const wantsCascade = window.confirm(
+                            `تم تغيير اسم "${oldChain.join(' بن ') || firstName}" وأصبح "${newChain.join(' بن ')}".\n\n` +
+                            `لدى هذا الشخص ${childrenOfEdited.length} من الأبناء المرتبطين به.\n` +
+                            `هل تريد تغيير أسماء الأبناء (وأحفادهم) أيضًا ليبقوا تابعين له بالاسم الجديد؟`
+                        );
+                        if (wantsCascade) {
+                            let updatedCount = 0;
+                            const updateDescendants = async (parentId, parentChain) => {
+                                const kids = cards.filter(c => c.parentId === parentId);
+                                for (const kid of kids) {
+                                    const kidOwn = (parseNameParts(kid.name)[0] || kid.firstName || '').trim();
+                                    if (!kidOwn) continue;
+                                    const kidGender = getEffectiveGender(kid);
+                                    const kidChain = [kidOwn, ...parentChain];
+                                    const kidName = buildFullName(kidChain, kidGender, true);
+                                    await updateDoc(doc(db, "flashcards", kid.id), { name: kidName, firstName: kidOwn });
+                                    updatedCount++;
+                                    await updateDescendants(kid.id, kidChain);
+                                }
+                            };
+                            await updateDescendants(id, newChain);
+                            showNotification(`تم تحديث أسماء ${updatedCount} من الأبناء/الأحفاد ليتابعوا الاسم الجديد`, "success");
+                        }
+                    }
+                } catch (cascadeError) {
+                    console.error("Error cascading name update:", cascadeError);
+                    showNotification("تم الحفظ لكن حدث خطأ أثناء تحديث أسماء الأبناء", "error");
+                }
               } else {
                 const newDocRef = doc(collection(db, "flashcards"));
                 await setDoc(newDocRef, { 
@@ -1171,10 +1258,49 @@
 
           const executeDeleteCard = async (id) => {
             try {
+              const cardToDelete = cardsMap.get(id);
               const children = cards.filter(c => c.parentId === id);
-              for (const child of children) {
-                  await updateDoc(doc(db, "flashcards", child.id), { parentId: null });
+
+              // إن كان له أبناء: نسأل عن حذف اسمه من عندهم ليبقوا متصلين بمن فوقه مباشرة
+              let spliceChain = null;
+              if (children.length > 0) {
+                  const wantsSplice = window.confirm(
+                      `هذا الشخص له ${children.length} من الأبناء.\n\n` +
+                      `هل تريد حذف اسمه من عند الأبناء أيضًا ليبقوا متصلين بمن فوقه مباشرة؟`
+                  );
+                  if (wantsSplice) {
+                      // سلسلة النسب لمن فوقه مباشرة (أو فارغة إن لم يكن له أب مسجل)
+                      spliceChain = getLineageChain(cardToDelete || {}, cardsMap).slice(1);
+                  }
               }
+
+              if (spliceChain) {
+                  const adoptiveParentId = cardToDelete?.parentId || null;
+                  let updatedCount = 0;
+                  const spliceDescendants = async (removedId, parentChain) => {
+                      const kids = cards.filter(c => c.parentId === removedId);
+                      for (const kid of kids) {
+                          const kidOwn = (parseNameParts(kid.name)[0] || kid.firstName || '').trim();
+                          const kidGender = getEffectiveGender(kid);
+                          const kidChain = kidOwn ? [kidOwn, ...parentChain] : parentChain;
+                          const kidName = kidOwn ? buildFullName(kidChain, kidGender, true) : kid.name;
+                          await updateDoc(doc(db, "flashcards", kid.id), {
+                              parentId: removedId === id ? adoptiveParentId : kid.parentId,
+                              name: kidName,
+                              firstName: kidOwn || kid.firstName
+                          });
+                          updatedCount++;
+                          await spliceDescendants(kid.id, kidChain);
+                      }
+                  };
+                  await spliceDescendants(id, spliceChain);
+                  showNotification(`تم حذف الاسم من عند ${updatedCount} من الأبناء/الأحفاد وأصبحوا تابعين لمن فوقه مباشرة`, "success");
+              } else {
+                  for (const child of children) {
+                      await updateDoc(doc(db, "flashcards", child.id), { parentId: null });
+                  }
+              }
+
               const maternalChildren = cards.filter(c => c.motherId === id);
               for (const child of maternalChildren) {
                   await updateDoc(doc(db, "flashcards", child.id), { motherId: null });
@@ -1533,18 +1659,38 @@
                 return currentParentId;
             };
 
+            // جنس فعلي مأخوذ من بيانات البطاقة المخزنة (وليس من حالة النموذج القابلة للتغيير)
+            // حتى لا تنعكس تسمية الأقارب خطأً إذا اختلفت حالة النموذج عن المسجل في قاعدة البيانات
+            const effGender = me ? getEffectiveGender(me) : gender;
+
+            // زواج البطاقة كما هو مسجل فعلياً في قاعدة البيانات
+            const myMarriagesForDisplay = useMemo(() =>
+                me ? (effGender === 'female' ? getWomanMarriages(me) : getFatherMarriages(me)) : [],
+                [me, effGender, cards, cardsMap]);
+
+            // معرفات الشركاء الحاليين لاستثنائهم من اقتراحات إضافة زوج/زوجة
+            const existingPartnerIds = useMemo(() => {
+                const set = new Set();
+                myMarriagesForDisplay.forEach(m => {
+                    const p = effGender === 'female' ? m.husband : cardsMap.get(m.wifeId);
+                    if (p) set.add(p.id);
+                });
+                return set;
+            }, [myMarriagesForDisplay, effGender, cardsMap]);
+
             const spouseCandidates = useMemo(() => {
                 const q = spouseQuery.trim();
                 if (!q) return [];
                 const opposite = gender === 'female' ? 'male' : 'female';
                 return cards
                     .filter(c => getEffectiveGender(c) === opposite && (!isEdit || c.id !== initialData.id))
+                    .filter(c => !existingPartnerIds.has(c.id))
                     .filter(c => {
                         const hay = `${c.firstName || ''} ${stripClanSuffix(c.name || '')}`;
                         return q.split(/\s+/).every(w => hay.includes(w));
                     })
                     .slice(0, 6);
-            }, [spouseQuery, cards, gender, isEdit, initialData]);
+            }, [spouseQuery, cards, gender, isEdit, initialData, existingPartnerIds]);
 
             const handleAddSpouse = async (existingCard = null) => {
                 if (!isEdit || !initialData) return;
@@ -1554,7 +1700,7 @@
                 try {
                     let spouseCard = existingCard;
                     if (!spouseCard) {
-                        const spouseGender = gender === 'female' ? 'male' : 'female';
+                        const spouseGender = effGender === 'female' ? 'male' : 'female';
                         const parts = parseNameParts(q);
                         const firstName = parts[0] || q;
                         const parentId = await resolveParentForParts(parts, null);
@@ -1575,7 +1721,7 @@
                         });
                     }
 
-                    if (gender !== 'female') {
+                    if (effGender !== 'female') {
                         const ms = Array.isArray(me.marriages) ? [...me.marriages] : [];
                         if (!ms.find(m => m.wifeId === spouseCard.id)) ms.push({ wifeId: spouseCard.id, status: 'active' });
                         await updateDoc(doc(db, "flashcards", me.id), { marriages: ms });
@@ -2100,15 +2246,49 @@
                   {isEdit && (
                     <div className="bg-sky-50/70 p-4 rounded-2xl border border-sky-200 relative">
                       <label className="block text-sky-900 font-bold mb-1 flex items-center gap-2 text-sm">
-                        <Heart size={16} className="text-sky-600" /> إضافة {gender === 'female' ? 'زوج' : 'زوجة'} (اختياري)
+                        <Heart size={16} className="text-sky-600" /> إضافة {(isEdit ? effGender : gender) === 'female' ? 'زوج' : 'زوجة'} (اختياري)
                       </label>
+
+                      {/* الزوج/الزوجة الحاليون كما هما مسجلان (اضغط للانتقال إلى البطاقة) */}
+                      {myMarriagesForDisplay.filter(m => {
+                        const p = effGender === 'female' ? m.husband : cardsMap.get(m.wifeId);
+                        return p && p.id !== me.id;
+                      }).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {myMarriagesForDisplay.map((m, idx) => {
+                            const p = effGender === 'female' ? m.husband : cardsMap.get(m.wifeId);
+                            if (!p || p.id === me.id) return null;
+                            const isDiv = m.status === 'divorced';
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => navigateToRelative(p)}
+                                title="الضغط ينقلك إلى بطاقة الزوج/الزوجة"
+                                className={`px-3 py-1.5 rounded-full text-[11px] font-bold border transition inline-flex items-center gap-1.5 ${
+                                  isDiv
+                                    ? 'bg-red-50 text-red-700 border-red-300 hover:bg-red-100'
+                                    : effGender === 'female'
+                                      ? 'bg-sky-100 text-sky-800 border-sky-300 hover:bg-sky-200'
+                                      : 'bg-pink-100 text-pink-800 border-pink-300 hover:bg-pink-200'
+                                }`}
+                              >
+                                <Heart size={11} />
+                                {effGender === 'female' ? 'الزوج' : 'الزوجة'} {idx + 1}: {p.firstName || parseNameParts(p.name)[0]}
+                                {isDiv && ' (منفصل)'}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
                       <p className="text-[11px] text-sky-700/80 mb-2">اكتب الاسم: يظهر الأقرب من الموجود للاختيار، وإن لم يوجد يُنشأ تلقائياً ويُربط زواجاً.</p>
                       <input
                         type="text"
                         value={spouseQuery}
                         onChange={(e) => setSpouseQuery(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddSpouse(null); } }}
-                        placeholder={gender === 'female' ? 'اسم الزوج... (مثال: خالد بن سعد)' : 'اسم الزوجة... (مثال: نورة بنت عبدالله)'}
+                        placeholder={(isEdit ? effGender : gender) === 'female' ? 'اسم الزوج... (مثال: خالد بن سعد)' : 'اسم الزوجة... (مثال: نورة بنت عبدالله)'}
                         className="w-full border border-sky-200 rounded-xl px-4 py-2.5 bg-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-sky-400"
                       />
                       {spouseQuery.trim() && (
@@ -2253,12 +2433,15 @@
                       )}
 
                       {/* الزوج/الزوجة */}
-                      {(gender === 'female' ? myMarriagesAsWoman : myActiveWivesAll).length > 0 && (
+                      {myMarriagesForDisplay.filter(m => {
+                        const p = effGender === 'female' ? m.husband : cardsMap.get(m.wifeId);
+                        return p && p.id !== me.id;
+                      }).length > 0 && (
                         <div className="space-y-2 mb-2">
-                          <div className="text-[11px] font-black text-amber-800">{gender === 'female' ? 'الأزواج:' : 'الزوجات:'}</div>
-                          {(gender === 'female' ? myMarriagesAsWoman : myActiveWivesAll).map((m, idx) => {
-                            const partner = gender === 'female' ? m.husband : cardsMap.get(m.wifeId);
-                            if (!partner) return null;
+                          <div className="text-[11px] font-black text-amber-800">{effGender === 'female' ? 'الأزواج:' : 'الزوجات:'}</div>
+                          {myMarriagesForDisplay.map((m, idx) => {
+                            const partner = effGender === 'female' ? m.husband : cardsMap.get(m.wifeId);
+                            if (!partner || partner.id === me.id) return null;
                             const isDiv = m.status === 'divorced';
                             const husbandId = gender === 'female' ? partner.id : me.id;
                             const wifeId = gender === 'female' ? me.id : partner.id;
@@ -2269,7 +2452,7 @@
                                   onClick={() => navigateToRelative(partner)}
                                   className="text-sm font-black text-gray-800 hover:underline"
                                 >
-                                  {gender === 'female' ? 'الزوج' : 'الزوجة'} {idx + 1}: {getDisplayFullName(partner)}
+                                  {effGender === 'female' ? 'الزوج' : 'الزوجة'} {idx + 1}: {getDisplayFullName(partner)}
                                 </button>
                                 <div className="flex items-center gap-1.5">
                                   <button
@@ -2322,7 +2505,10 @@
                         </div>
                       )}
 
-                      {(!me.motherId || cardsMap.get(me.motherId) === undefined) && (gender === 'female' ? myMarriagesAsWoman : myActiveWivesAll).length === 0 && existingChildren.length === 0 && (
+                      {(!me.motherId || cardsMap.get(me.motherId) === undefined) && myMarriagesForDisplay.filter(m => {
+                        const p = effGender === 'female' ? m.husband : cardsMap.get(m.wifeId);
+                        return p && p.id !== me.id;
+                      }).length === 0 && existingChildren.length === 0 && (
                         <p className="text-[11px] text-amber-700/70">لا يوجد أقارب مرتبطون بهذه البطاقة بعد.</p>
                       )}
                     </div>
@@ -2375,12 +2561,21 @@
                         </label>
                       </div>
                     </div>
-                    <div className="mt-4 flex justify-center">
+                    <div className="mt-4 flex flex-col items-center justify-center gap-2">
                       <PersonAvatar
                         card={{ image, gender, name: previewFullName }}
                         sizeClass="w-28 h-28"
                         imgClassName="object-contain"
                       />
+                      {(image || imageFile) && (
+                        <button
+                          type="button"
+                          onClick={() => { setImage(''); setImageFile(null); }}
+                          className="text-xs font-bold px-3 py-1.5 rounded-full bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition inline-flex items-center gap-1.5"
+                        >
+                          <Trash2 size={12} /> حذف الصورة (تعود الصورة التراثية الافتراضية)
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -2757,13 +2952,24 @@
                                   height: treeSize.h ? `${treeSize.h}px` : '100%'
                               }}
                           >
+                          {(() => {
+                              // هذه الطبقة خارج tree-wrapper ولا تتأثر بالزوم، لذا نحوّل إحداثيات المحتوى
+                              // (المحسوبة بقسمة إحداثيات الشاشة على الزوم) إلى إحداثياتها الخاصة
+                              const _c = treeContainerRef.current;
+                              const _z = treeZoom || 1;
+                              const _sl = _c ? Math.max(0, _c.scrollLeft) : 0;
+                              const _st = _c ? Math.max(0, _c.scrollTop) : 0;
+                              const sx = (x) => (x - _sl) * _z + _sl;
+                              const sy = (y) => (y - _st) * _z + _st;
+                              return (<>
                               {connectorLines.map(line => {
-                                  const midX = (line.x1 + line.x2) / 2;
-                                  const midY = (line.y1 + line.y2) / 2;
+                                  const x1 = sx(line.x1), y1 = sy(line.y1), x2 = sx(line.x2), y2 = sy(line.y2);
+                                  const midX = (x1 + x2) / 2;
+                                  const midY = (y1 + y2) / 2;
                                   const strokeColor = line.isDivorced ? '#991b1b' : '#ec4899';
-                                  const ctrlX1 = line.x1 + (midX - line.x1) * 0.65;
-                                  const ctrlX2 = line.x2 - (line.x2 - midX) * 0.65;
-                                  const pathD = `M ${line.x1} ${line.y1} C ${ctrlX1} ${line.y1}, ${ctrlX2} ${line.y2}, ${line.x2} ${line.y2}`;
+                                  const ctrlX1 = x1 + (midX - x1) * 0.65;
+                                  const ctrlX2 = x2 - (x2 - midX) * 0.65;
+                                  const pathD = `M ${x1} ${y1} C ${ctrlX1} ${y1}, ${ctrlX2} ${y2}, ${x2} ${y2}`;
 
                                   return (
                                       <g key={line.key}>
@@ -2775,8 +2981,8 @@
                                               strokeDasharray={line.isDivorced ? "6 4" : "none"}
                                               opacity="0.95"
                                           />
-                                          <circle cx={line.x1} cy={line.y1} r="4.5" fill={strokeColor} stroke="#ffffff" strokeWidth="1.5" />
-                                          <circle cx={line.x2} cy={line.y2} r="4.5" fill={strokeColor} stroke="#ffffff" strokeWidth="1.5" />
+                                          <circle cx={x1} cy={y1} r="4.5" fill={strokeColor} stroke="#ffffff" strokeWidth="1.5" />
+                                          <circle cx={x2} cy={y2} r="4.5" fill={strokeColor} stroke="#ffffff" strokeWidth="1.5" />
 
                                           {line.isDivorced && (
                                               <g transform={`translate(${midX}, ${midY})`}>
@@ -2792,16 +2998,18 @@
                               {draggingLine && (
                                   <g>
                                       <path
-                                          d={`M ${draggingLine.startX} ${draggingLine.startY} L ${draggingLine.currentX} ${draggingLine.currentY}`}
+                                          d={`M ${sx(draggingLine.startX)} ${sy(draggingLine.startY)} L ${sx(draggingLine.currentX)} ${sy(draggingLine.currentY)}`}
                                           fill="none"
                                           stroke="#db2777"
                                           strokeWidth="3"
                                           strokeDasharray="6 4"
                                       />
-                                      <circle cx={draggingLine.startX} cy={draggingLine.startY} r="5" fill="#db2777" />
-                                      <circle cx={draggingLine.currentX} cy={draggingLine.currentY} r="6" fill="#be185d" />
+                                      <circle cx={sx(draggingLine.startX)} cy={sy(draggingLine.startY)} r="5" fill="#db2777" />
+                                      <circle cx={sx(draggingLine.currentX)} cy={sy(draggingLine.currentY)} r="6" fill="#be185d" />
                                   </g>
                               )}
+                              </>);
+                          })()}
                           </svg>
 
                           <div
@@ -2809,7 +3017,7 @@
                               style={{ padding: '260px 120px' }}
                           >
                           <div
-                              className="tree-wrapper transition-transform origin-top relative z-10"
+                              className="tree-wrapper origin-top relative z-10"
                               style={{ transform: `scale(${treeZoom})` }}
                           >
                               <div className="tree">
@@ -3398,12 +3606,21 @@
 
                       <div className="w-full h-[40vh] min-h-[300px] rounded-3xl overflow-hidden bg-gray-50 relative border border-gray-100 mb-6 flex items-center justify-center p-4">
                         {!galleryShowInfo ? (
-                          <div className="w-full h-full flex items-center justify-center animate-in fade-in zoom-in duration-300">
+                          <div className="w-full h-full flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300">
                             <PersonAvatar
                               card={{ ...selectedCard, gender: getEffectiveGender(selectedCard) }}
                               sizeClass="w-64 h-64 sm:w-72 sm:h-72"
                               imgClassName="object-contain"
                             />
+                            {/* البطاقات بدون صورة: يُكتب الاسم تحت الصورة التراثية الافتراضية */}
+                            {!selectedCard.image && (
+                              <div className="mt-4 text-center">
+                                <div className="text-lg sm:text-xl font-black text-gray-800 leading-relaxed">
+                                  {getDisplayFullName(selectedCard)}
+                                </div>
+                                <div className="text-[11px] text-gray-400 font-bold mt-1">(لا توجد صورة مخصصة — الصورة افتراضية حسب الجنس)</div>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300 overflow-y-auto">
